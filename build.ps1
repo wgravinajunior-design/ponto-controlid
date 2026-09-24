@@ -25,7 +25,7 @@ Write-Host "==========================================================" -Foregro
 
 # Localizar Git e GitHub CLI e garantir no PATH
 if (Test-Path "C:\Program Files\Git\cmd") {
-    $env:Path = "C:\Program Files\Git\cmd;" + $env:Path
+    $env:Path = "C:\Program Files\Git\cmd;C:\Program Files\Git\bin;" + $env:Path
 }
 if (Test-Path "C:\Program Files\GitHub CLI") {
     $env:Path = "C:\Program Files\GitHub CLI;" + $env:Path
@@ -73,7 +73,7 @@ if (-not (Test-Path -Path $RsVars)) {
 }
 
 $DprojMain = Join-Path $ScriptDir "PontoControlID.dproj"
-$BuildCmd = "call `"$RsVars`" && msbuild `"$DprojMain`" /t:Build /p:Configuration=$Config /p:Platform=$Platform"
+$BuildCmd = "call `"$RsVars`" && msbuild `"$DprojMain`" /t:Rebuild /p:Configuration=$Config /p:Platform=$Platform"
 cmd /c $BuildCmd
 
 if ($LASTEXITCODE -ne 0) {

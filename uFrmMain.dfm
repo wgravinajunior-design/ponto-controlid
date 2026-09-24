@@ -47,7 +47,7 @@ object frmMain: TfrmMain
       Top = 35
       Width = 34
       Height = 15
-      Caption = 'v1.0.0'
+      Caption = 'v1.0.2'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 16297272
       Font.Height = -12
@@ -2601,7 +2601,7 @@ object frmMain: TfrmMain
       Top = 8
       Width = 34
       Height = 15
-      Caption = 'v1.0.0'
+      Caption = 'v1.0.2'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 15921906
       Font.Height = -12
