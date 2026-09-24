@@ -147,7 +147,38 @@ type
     lblTotalMarcacoesGrid: TLabel;
     dbgMarcacoes: TDBGrid;
     tabConfig: TTabSheet;
+    pgcConfig: TPageControl;
+    tabCfgParametros: TTabSheet;
     btnConfigVoltar: TButton;
+    btnIrParaVersoes: TButton;
+    tabCfgVersoes: TTabSheet;
+    pnlVersaoHeader: TPanel;
+    lblVersaoTitulo: TLabel;
+    lblPesquisarVersao: TLabel;
+    edtPesquisarVersao: TEdit;
+    pnlVersaoFooter: TPanel;
+    btnVersaoAtualizar: TButton;
+    btnVersaoSair: TButton;
+    pnlVersaoBody: TPanel;
+    pnlVersaoEsq: TPanel;
+    grpVersoes: TGroupBox;
+    dbgVersoes: TDBGrid;
+    pnlVersaoContador: TPanel;
+    lblVersaoContador: TLabel;
+    pnlVersaoLegenda: TPanel;
+    pbLegenda: TPaintBox;
+    splVersao: TSplitter;
+    pnlVersaoDir: TPanel;
+    grpScript: TGroupBox;
+    mmoScript: TMemo;
+    splScriptProg: TSplitter;
+    grpProgresso: TGroupBox;
+    mmoProgresso: TMemo;
+    splProgErros: TSplitter;
+    grpErros: TGroupBox;
+    mmoErros: TMemo;
+    mtVersoes: TFDMemTable;
+    dsVersoes: TDataSource;
     grpBanco: TGroupBox;
     lblCfgServer: TLabel;
     edtCfgServer: TEdit;
@@ -340,6 +371,18 @@ type
     procedure btnTopConfigClick(Sender: TObject);
     procedure btnTopUpdateClick(Sender: TObject);
     procedure btnConfigVoltarClick(Sender: TObject);
+
+    // Controle de Versão (Log de Atualização)
+    procedure btnIrParaVersoesClick(Sender: TObject);
+    procedure btnVersaoAtualizarClick(Sender: TObject);
+    procedure btnVersaoSairClick(Sender: TObject);
+    procedure edtPesquisarVersaoChange(Sender: TObject);
+    procedure dbgVersoesDrawColumnCell(Sender: TObject; const Rect: TRect;
+      DataCol: Integer; Column: TColumn; State: TGridDrawState);
+    procedure mtVersoesAfterScroll(DataSet: TDataSet);
+    procedure pbLegendaPaint(Sender: TObject);
+    procedure CarregarControleVersao;
+    procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
   private
     FPontoService: TPontoService;
     FdsRelogios: TDataSource;
@@ -571,14 +614,26 @@ begin
     CarregarMarcacoes;
     AtualizarDashboard;
     btnCarregarEmpBancoClick(nil);
+    CarregarControleVersao;
     ChecarAtualizacaoSistemaAsync;
+
+    KeyPreview := True;
+    OnKeyDown := FormKeyDown;
 
     if FindCmdLineSwitch('tab_colab') then
       pgcMain.ActivePage := tabColaboradores
     else if FindCmdLineSwitch('tab_marc') then
       pgcMain.ActivePage := tabMarcacoes
     else if FindCmdLineSwitch('tab_cfg') then
-      pgcMain.ActivePage := tabConfig
+    begin
+      pgcMain.ActivePage := tabConfig;
+      pgcConfig.ActivePage := tabCfgParametros;
+    end
+    else if FindCmdLineSwitch('tab_versao') then
+    begin
+      pgcMain.ActivePage := tabConfig;
+      pgcConfig.ActivePage := tabCfgVersoes;
+    end
     else if FindCmdLineSwitch('tab_hor') then
       pgcMain.ActivePage := tabHorarios
     else if FindCmdLineSwitch('tab_esp') then
@@ -2021,6 +2076,12 @@ begin
   begin
     FPreviousTab := pgcMain.ActivePage;
     pgcMain.ActivePage := tabConfig;
+    if Assigned(pgcConfig) then
+    begin
+      if pgcConfig.ActivePage = nil then
+        pgcConfig.ActivePage := tabCfgParametros;
+    end;
+    CarregarControleVersao;
   end;
 end;
 
@@ -2030,6 +2091,254 @@ begin
     pgcMain.ActivePage := FPreviousTab
   else
     pgcMain.ActivePage := tabDashboard;
+end;
+
+procedure TfrmMain.btnIrParaVersoesClick(Sender: TObject);
+begin
+  if Assigned(pgcConfig) and Assigned(tabCfgVersoes) then
+  begin
+    pgcConfig.ActivePage := tabCfgVersoes;
+    CarregarControleVersao;
+  end;
+end;
+
+procedure TfrmMain.btnVersaoSairClick(Sender: TObject);
+begin
+  if FPreviousTab <> nil then
+    pgcMain.ActivePage := FPreviousTab
+  else
+    pgcMain.ActivePage := tabDashboard;
+end;
+
+procedure TfrmMain.btnVersaoAtualizarClick(Sender: TObject);
+var
+  LogMig: string;
+begin
+  Screen.Cursor := crHourGlass;
+  try
+    dmDados.VerificarEAtualizarEstruturaBanco(LogMig);
+    CarregarControleVersao;
+    ShowMessage('Base de dados verificada e sincronizada com sucesso!'#13#10#13#10 + LogMig);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+end;
+
+procedure TfrmMain.edtPesquisarVersaoChange(Sender: TObject);
+var
+  Termo: string;
+begin
+  if not Assigned(mtVersoes) or not mtVersoes.Active then
+    Exit;
+
+  Termo := Trim(edtPesquisarVersao.Text);
+  if Termo = '' then
+    mtVersoes.Filtered := False
+  else
+  begin
+    mtVersoes.Filter := Format(
+      '(VERSAO LIKE ''%%%s%%'') OR (ACAO LIKE ''%%%s%%'') OR (DESCRICAO LIKE ''%%%s%%'') OR (SCRIPT LIKE ''%%%s%%'')',
+      [Termo, Termo, Termo, Termo]);
+    mtVersoes.Filtered := True;
+  end;
+  lblVersaoContador.Caption := Format('  %d registros', [mtVersoes.RecordCount]);
+  mtVersoesAfterScroll(mtVersoes);
+end;
+
+procedure TfrmMain.dbgVersoesDrawColumnCell(Sender: TObject; const Rect: TRect;
+  DataCol: Integer; Column: TColumn; State: TGridDrawState);
+var
+  StatusVal: string;
+  CenterX, CenterY, Radius: Integer;
+  BrushColor, PenColor: TColor;
+begin
+  if not Assigned(mtVersoes) or not mtVersoes.Active then
+    Exit;
+
+  if Column.FieldName = 'STATUS' then
+  begin
+    dbgVersoes.Canvas.FillRect(Rect);
+    StatusVal := mtVersoes.FieldByName('STATUS').AsString;
+
+    // Cores fiéis à imagem:
+    // Verde = Desatualizado, Azul = Atualizado, Vermelho = Atualizado com erros
+    if StatusVal = 'D' then
+    begin
+      BrushColor := $002EC971; // Verde esmeralda
+      PenColor := $001B8A4C;
+    end
+    else if StatusVal = 'E' then
+    begin
+      BrushColor := $003333E7; // Vermelho rubi
+      PenColor := $002222A8;
+    end
+    else
+    begin
+      BrushColor := $00D45C1A; // Azul Royal / Cobalto
+      PenColor := $00943A08;
+    end;
+
+    CenterX := (Rect.Left + Rect.Right) div 2;
+    CenterY := (Rect.Top + Rect.Bottom) div 2;
+    Radius := 7;
+
+    dbgVersoes.Canvas.Brush.Color := BrushColor;
+    dbgVersoes.Canvas.Pen.Color := PenColor;
+    dbgVersoes.Canvas.Ellipse(CenterX - Radius, CenterY - Radius, CenterX + Radius, CenterY + Radius);
+
+    // Efeito de reflexo de luz / esfera 3D idêntico à imagem
+    dbgVersoes.Canvas.Brush.Color := clWhite;
+    dbgVersoes.Canvas.Pen.Color := clWhite;
+    dbgVersoes.Canvas.Ellipse(CenterX - Radius + 2, CenterY - Radius + 2, CenterX - Radius + 5, CenterY - Radius + 5);
+  end
+  else
+  begin
+    dbgVersoes.DefaultDrawColumnCell(Rect, DataCol, Column, State);
+  end;
+end;
+
+procedure TfrmMain.mtVersoesAfterScroll(DataSet: TDataSet);
+begin
+  if Assigned(mmoScript) and Assigned(mmoProgresso) and Assigned(mmoErros) then
+  begin
+    if Assigned(mtVersoes) and mtVersoes.Active and not mtVersoes.IsEmpty then
+    begin
+      mmoScript.Text := mtVersoes.FieldByName('SCRIPT').AsString;
+      mmoProgresso.Text := mtVersoes.FieldByName('PROGRESSO').AsString;
+      mmoErros.Text := mtVersoes.FieldByName('ERROS').AsString;
+    end
+    else
+    begin
+      mmoScript.Clear;
+      mmoProgresso.Clear;
+      mmoErros.Clear;
+    end;
+  end;
+end;
+
+procedure TfrmMain.pbLegendaPaint(Sender: TObject);
+var
+  C: TCanvas;
+  X, Y, R: Integer;
+begin
+  if not Assigned(pbLegenda) then
+    Exit;
+
+  C := pbLegenda.Canvas;
+  C.Brush.Color := clWhite;
+  C.FillRect(pbLegenda.ClientRect);
+  C.Font.Name := 'Segoe UI';
+  C.Font.Size := 9;
+  C.Font.Color := clWindowText;
+
+  R := 6;
+  Y := pbLegenda.Height div 2;
+
+  // 1. Desatualizado (Verde)
+  X := 16;
+  C.Brush.Style := bsSolid;
+  C.Brush.Color := $002EC971; // Verde
+  C.Pen.Color := $001B8A4C;
+  C.Ellipse(X - R, Y - R, X + R, Y + R);
+  C.Brush.Color := clWhite;
+  C.Pen.Color := clWhite;
+  C.Ellipse(X - R + 2, Y - R + 2, X - R + 5, Y - R + 5);
+  C.Brush.Style := bsClear;
+  C.TextOut(X + R + 6, Y - (C.TextHeight('D') div 2), 'Desatualizado');
+
+  // 2. Atualizado (Azul)
+  X := 130;
+  C.Brush.Style := bsSolid;
+  C.Brush.Color := $00D45C1A; // Azul
+  C.Pen.Color := $00943A08;
+  C.Ellipse(X - R, Y - R, X + R, Y + R);
+  C.Brush.Color := clWhite;
+  C.Pen.Color := clWhite;
+  C.Ellipse(X - R + 2, Y - R + 2, X - R + 5, Y - R + 5);
+  C.Brush.Style := bsClear;
+  C.TextOut(X + R + 6, Y - (C.TextHeight('A') div 2), 'Atualizado');
+
+  // 3. Atualizado com erros (Vermelho)
+  X := 230;
+  C.Brush.Style := bsSolid;
+  C.Brush.Color := $003333E7; // Vermelho
+  C.Pen.Color := $002222A8;
+  C.Ellipse(X - R, Y - R, X + R, Y + R);
+  C.Brush.Color := clWhite;
+  C.Pen.Color := clWhite;
+  C.Ellipse(X - R + 2, Y - R + 2, X - R + 5, Y - R + 5);
+  C.Brush.Style := bsClear;
+  C.TextOut(X + R + 6, Y - (C.TextHeight('A') div 2), 'Atualizado com erros');
+end;
+
+procedure TfrmMain.CarregarControleVersao;
+var
+  Versoes: TBdVersaoArray;
+  I: Integer;
+begin
+  if not Assigned(mtVersoes) then
+    Exit;
+
+  mtVersoes.DisableControls;
+  try
+    if not mtVersoes.Active then
+    begin
+      mtVersoes.FieldDefs.Clear;
+      mtVersoes.FieldDefs.Add('STATUS', ftString, 1);
+      mtVersoes.FieldDefs.Add('CODIGO', ftInteger);
+      mtVersoes.FieldDefs.Add('VERSAO', ftString, 20);
+      mtVersoes.FieldDefs.Add('DATA_HORA', ftString, 25);
+      mtVersoes.FieldDefs.Add('ACAO', ftString, 40);
+      mtVersoes.FieldDefs.Add('DESCRICAO', ftString, 250);
+      mtVersoes.FieldDefs.Add('SCRIPT', ftMemo);
+      mtVersoes.FieldDefs.Add('PROGRESSO', ftMemo);
+      mtVersoes.FieldDefs.Add('ERROS', ftMemo);
+      mtVersoes.CreateDataSet;
+    end
+    else
+      mtVersoes.EmptyDataSet;
+
+    Versoes := dmDados.ObterHistoricoVersoes;
+    for I := 0 to High(Versoes) do
+    begin
+      mtVersoes.Append;
+      mtVersoes.FieldByName('STATUS').AsString := Versoes[I].Status;
+      mtVersoes.FieldByName('CODIGO').AsInteger := Versoes[I].Numero;
+      mtVersoes.FieldByName('VERSAO').AsString := Versoes[I].Sistema;
+      mtVersoes.FieldByName('DATA_HORA').AsString := FormatDateTime('dd/mm/yyyy hh:nn:ss', Versoes[I].DataHora);
+      mtVersoes.FieldByName('ACAO').AsString := Versoes[I].Acao;
+      mtVersoes.FieldByName('DESCRICAO').AsString := Versoes[I].Descricao;
+      mtVersoes.FieldByName('SCRIPT').AsString := Versoes[I].Script;
+      mtVersoes.FieldByName('PROGRESSO').AsString := Versoes[I].Progresso;
+      mtVersoes.FieldByName('ERROS').AsString := Versoes[I].Erros;
+      mtVersoes.Post;
+    end;
+
+    mtVersoes.First;
+  finally
+    mtVersoes.EnableControls;
+  end;
+
+  if Assigned(lblVersaoContador) then
+    lblVersaoContador.Caption := Format('  %d registros', [mtVersoes.RecordCount]);
+  mtVersoesAfterScroll(mtVersoes);
+end;
+
+procedure TfrmMain.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+begin
+  if (pgcMain.ActivePage = tabConfig) and Assigned(pgcConfig) and (pgcConfig.ActivePage = tabCfgVersoes) then
+  begin
+    if Key = VK_F4 then
+    begin
+      Key := 0;
+      btnVersaoAtualizarClick(nil);
+    end
+    else if Key = VK_ESCAPE then
+    begin
+      Key := 0;
+      btnVersaoSairClick(nil);
+    end;
+  end;
 end;
 
 procedure TfrmMain.btnTopUpdateClick(Sender: TObject);

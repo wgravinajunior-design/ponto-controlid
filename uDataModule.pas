@@ -12,6 +12,20 @@ uses
   Data.DB, uConfig;
 
 type
+  TBdVersaoItem = record
+    Id: Integer;
+    Numero: Integer;
+    Sistema: string;
+    DataHora: TDateTime;
+    Descricao: string;
+    Acao: string;
+    Status: Char; // 'A' = Atualizado, 'D' = Desatualizado, 'E' = Erro
+    Script: string;
+    Progresso: string;
+    Erros: string;
+  end;
+  TBdVersaoArray = array of TBdVersaoItem;
+
   TdmDados = class(TDataModule)
     FDConnection: TFDConnection;
     FDPhysFBDriverLink: TFDPhysFBDriverLink;
@@ -73,7 +87,8 @@ type
     function GetMarcacoes(ADataIni, ADataFim: TDateTime; ARelogioId: Integer = 0;
       APessoaId: Integer = 0): TFDQuery;
     function ExcluirMarcacao(AMarcacaoId: Integer): Boolean;
-    function AtualizarMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida: string): Boolean;
+    function AtualizarMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida: string;
+      const AMotivo: string = ''): Boolean;
     function InserirMarcacaoManual(APessoaId, ARelogioId: Integer; ADataHora: TDateTime;
       const ATipoBatida: string): Integer;
 
@@ -89,6 +104,7 @@ type
     function ExecutarComandoDDL(const ASQL: string): Boolean;
     function ObterVersaoBanco: Integer;
     function VerificarEAtualizarEstruturaBanco(out ALogMigracao: string): Boolean;
+    function ObterHistoricoVersoes: TBdVersaoArray;
 
     property LastError: string read FLastError;
     property LastMigracaoLog: string read FLastMigracaoLog;
@@ -855,7 +871,8 @@ begin
   end;
 end;
 
-function TdmDados.AtualizarMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida: string): Boolean;
+function TdmDados.AtualizarMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida: string;
+  const AMotivo: string): Boolean;
 var
   Qry: TFDQuery;
 begin
@@ -870,10 +887,13 @@ begin
       'UPDATE TB_PONTO_MARCACAO SET ' +
       '  PMA_DATA_HORA = :DH, ' +
       '  PMA_TIPO_BATIDA = :TIPO, ' +
-      '  PMA_ORIGEM = ''M'' ' +
+      '  PMA_ORIGEM = ''M'', ' +
+      '  PMA_MOTIVO_AJUSTE = :MOTIVO, ' +
+      '  PMA_DATA_ALTERACAO = CURRENT_TIMESTAMP ' +
       'WHERE PMA_ID = :ID';
     Qry.ParamByName('DH').AsDateTime := ADataHora;
     Qry.ParamByName('TIPO').AsString := UpperCase(Trim(ATipoBatida));
+    Qry.ParamByName('MOTIVO').AsString := Copy(Trim(AMotivo), 1, 250);
     Qry.ParamByName('ID').AsInteger := AId;
     Qry.ExecSQL;
     Result := (Qry.RowsAffected > 0);
@@ -1253,7 +1273,7 @@ begin
 end;
 
 const
-  DB_SCHEMA_VERSION = 3;
+  DB_SCHEMA_VERSION = 5;
 
 function TdmDados.TabelaExiste(const ANomeTabela: string): Boolean;
 var
@@ -1339,6 +1359,59 @@ begin
   end;
 end;
 
+procedure SincronizarRegistroVersao(AConnection: TFDConnection; ANumero: Integer; const ASistema, AAcao, ADescricao, AScript, AProgresso: string);
+var
+  Qry: TFDQuery;
+begin
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := AConnection;
+    Qry.SQL.Text := 'SELECT VER_ID FROM TB_PONTO_VERSAO_BD WHERE VER_NUMERO = :NUM';
+    Qry.ParamByName('NUM').AsInteger := ANumero;
+    Qry.Open;
+    if Qry.IsEmpty then
+    begin
+      Qry.Close;
+      Qry.SQL.Text :=
+        'INSERT INTO TB_PONTO_VERSAO_BD (' +
+        '  VER_ID, VER_NUMERO, VER_SISTEMA, VER_DATA_HORA, VER_DESCRICAO, VER_ACAO, VER_STATUS, VER_SCRIPT, VER_PROGRESSO, VER_ERROS' +
+        ') VALUES (' +
+        '  (SELECT COALESCE(MAX(VER_ID), 0) + 1 FROM TB_PONTO_VERSAO_BD), ' +
+        '  :NUM, :SISTEMA, CURRENT_TIMESTAMP, :DESC, :ACAO, ''A'', :SCRIPT, :PROG, ''Nenhum erro registrado'')';
+      Qry.ParamByName('NUM').AsInteger := ANumero;
+      Qry.ParamByName('SISTEMA').AsString := ASistema;
+      Qry.ParamByName('DESC').AsString := ADescricao;
+      Qry.ParamByName('ACAO').AsString := AAcao;
+      Qry.ParamByName('SCRIPT').AsString := AScript;
+      Qry.ParamByName('PROG').AsString := AProgresso;
+      Qry.ExecSQL;
+    end
+    else
+    begin
+      Qry.Close;
+      Qry.SQL.Text :=
+        'UPDATE TB_PONTO_VERSAO_BD SET ' +
+        '  VER_SISTEMA = :SISTEMA, ' +
+        '  VER_DESCRICAO = :DESC, ' +
+        '  VER_ACAO = :ACAO, ' +
+        '  VER_STATUS = ''A'', ' +
+        '  VER_SCRIPT = :SCRIPT, ' +
+        '  VER_PROGRESSO = :PROG, ' +
+        '  VER_ERROS = ''Nenhum erro registrado'' ' +
+        'WHERE VER_NUMERO = :NUM';
+      Qry.ParamByName('SISTEMA').AsString := ASistema;
+      Qry.ParamByName('DESC').AsString := ADescricao;
+      Qry.ParamByName('ACAO').AsString := AAcao;
+      Qry.ParamByName('SCRIPT').AsString := AScript;
+      Qry.ParamByName('PROG').AsString := AProgresso;
+      Qry.ParamByName('NUM').AsInteger := ANumero;
+      Qry.ExecSQL;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
 function TdmDados.VerificarEAtualizarEstruturaBanco(out ALogMigracao: string): Boolean;
 var
   VersaoAtual: Integer;
@@ -1365,6 +1438,18 @@ begin
 
   if not GeneratorExiste('GEN_PONTO_VERSAO_BD') then
     ExecutarComandoDDL('CREATE GENERATOR GEN_PONTO_VERSAO_BD');
+
+  // Campos de controle avançado de versão e auditoria de script (Estilo Controle de Versão)
+  if not CampoExiste('TB_PONTO_VERSAO_BD', 'VER_ACAO') then
+    ExecutarComandoDDL('ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_ACAO VARCHAR(40)');
+  if not CampoExiste('TB_PONTO_VERSAO_BD', 'VER_STATUS') then
+    ExecutarComandoDDL('ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_STATUS CHAR(1) DEFAULT ''A''');
+  if not CampoExiste('TB_PONTO_VERSAO_BD', 'VER_SCRIPT') then
+    ExecutarComandoDDL('ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_SCRIPT BLOB SUB_TYPE TEXT');
+  if not CampoExiste('TB_PONTO_VERSAO_BD', 'VER_PROGRESSO') then
+    ExecutarComandoDDL('ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_PROGRESSO BLOB SUB_TYPE TEXT');
+  if not CampoExiste('TB_PONTO_VERSAO_BD', 'VER_ERROS') then
+    ExecutarComandoDDL('ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_ERROS BLOB SUB_TYPE TEXT');
 
   VersaoAtual := ObterVersaoBanco;
 
@@ -1413,6 +1498,12 @@ begin
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_RELOGIO ADD PRE_ATIVO CHAR(1) DEFAULT ''S''');
     if not CampoExiste('TB_PONTO_RELOGIO', 'PRE_DATA_HORA_SYNC') then
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_RELOGIO ADD PRE_DATA_HORA_SYNC TIMESTAMP');
+    if not CampoExiste('TB_PONTO_RELOGIO', 'PRE_LOCALIZACAO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_RELOGIO ADD PRE_LOCALIZACAO VARCHAR(60)');
+    if not CampoExiste('TB_PONTO_RELOGIO', 'PRE_MAC') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_RELOGIO ADD PRE_MAC VARCHAR(20)');
+    if not CampoExiste('TB_PONTO_RELOGIO', 'PRE_TIMEZONE') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_RELOGIO ADD PRE_TIMEZONE VARCHAR(30)');
   end;
 
   if not GeneratorExiste('GEN_PONTO_RELOGIO') then
@@ -1459,6 +1550,12 @@ begin
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_EVENTO INTEGER DEFAULT 7');
     if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_MOTIVO_AJUSTE') then
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_MOTIVO_AJUSTE VARCHAR(250)');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DATA_ALTERACAO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_DATA_ALTERACAO TIMESTAMP');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_USUARIO_ALTERACAO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_USUARIO_ALTERACAO VARCHAR(40)');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_JUSTIFICATIVA_ID') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_JUSTIFICATIVA_ID INTEGER');
   end;
 
   if not GeneratorExiste('GEN_PONTO_MARCACAO') then
@@ -1485,6 +1582,12 @@ begin
       ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_ADMIN_RELOGIO CHAR(1) DEFAULT ''N''');
     if not CampoExiste('TB_COLABORADOR', 'COL_BARRAS') then
       ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_BARRAS VARCHAR(30)');
+    if not CampoExiste('TB_COLABORADOR', 'COL_MATRICULA') then
+      ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_MATRICULA VARCHAR(20)');
+    if not CampoExiste('TB_COLABORADOR', 'COL_DEPARTAMENTO') then
+      ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_DEPARTAMENTO VARCHAR(50)');
+    if not CampoExiste('TB_COLABORADOR', 'COL_BIOMETRIA_CADASTRADA') then
+      ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA_CADASTRADA CHAR(1) DEFAULT ''N''');
   end;
 
   // 5. TB_PONTO_HORARIO e faixas
@@ -1574,22 +1677,244 @@ begin
       '  JUS_CRIADO_EM TIMESTAMP DEFAULT CURRENT_TIMESTAMP' +
       ')');
     Alterou := True;
+  end
+  else
+  begin
+    if not CampoExiste('TB_PONTO_JUSTIFICATIVA', 'JUS_DOCUMENTO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_JUSTIFICATIVA ADD JUS_DOCUMENTO VARCHAR(100)');
+    if not CampoExiste('TB_PONTO_JUSTIFICATIVA', 'JUS_STATUS') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_JUSTIFICATIVA ADD JUS_STATUS CHAR(1) DEFAULT ''A''');
   end;
 
   if not GeneratorExiste('GEN_PONTO_JUSTIFICATIVA') then
     ExecutarComandoDDL('CREATE GENERATOR GEN_PONTO_JUSTIFICATIVA');
 
-  // 7. Atualizar Registro de Versão se a versão for menor que a atual
-  if (VersaoAtual < DB_SCHEMA_VERSION) or Alterou then
-  begin
-    ExecutarComandoDDL(
-      'INSERT INTO TB_PONTO_VERSAO_BD (VER_ID, VER_NUMERO, VER_SISTEMA, VER_DATA_HORA, VER_DESCRICAO) ' +
-      'VALUES (' +
-      '  (SELECT COALESCE(MAX(VER_ID), 0) + 1 FROM TB_PONTO_VERSAO_BD), ' +
-      IntToStr(DB_SCHEMA_VERSION) + ', ''1.1.0'', CURRENT_TIMESTAMP, ' +
-      '''Atualização automática de tabelas, campos e índices do Ponto Control iD''' +
-      ')');
-    ALogMigracao := Format('Base de dados atualizada com sucesso para a versão de schema %d.', [DB_SCHEMA_VERSION]);
+  // 7. Sincronizar Histórico e Scripts de cada Versão do Sistema
+  SincronizarRegistroVersao(
+    FDConnection, 1, '1.0.0', 'actVersao100',
+    'Criação da Estrutura Inicial do Ponto Control iD (Tabelas de Relógios e Marcações)',
+    '-- Criação da tabela de Relógios de Ponto'#13#10 +
+    'CREATE TABLE TB_PONTO_RELOGIO ('#13#10 +
+    '  PRE_ID INTEGER NOT NULL PRIMARY KEY,'#13#10 +
+    '  PRE_NOME VARCHAR(60) NOT NULL,'#13#10 +
+    '  PRE_IP VARCHAR(45) NOT NULL,'#13#10 +
+    '  PRE_PORTA INTEGER DEFAULT 80,'#13#10 +
+    '  PRE_USAR_SSL CHAR(1) DEFAULT ''N'','#13#10 +
+    '  PRE_USUARIO VARCHAR(40),'#13#10 +
+    '  PRE_SENHA VARCHAR(40),'#13#10 +
+    '  PRE_MODELO VARCHAR(40) DEFAULT ''IDCLASS'','#13#10 +
+    '  PRE_MODO_COLETA VARCHAR(20) DEFAULT ''API'','#13#10 +
+    '  PRE_ULTIMO_LOG_ID BIGINT DEFAULT 0,'#13#10 +
+    '  PRE_STATUS CHAR(1) DEFAULT ''A'','#13#10 +
+    '  PRE_ATIVO CHAR(1) DEFAULT ''S'','#13#10 +
+    '  PRE_DEVICE_ID VARCHAR(50),'#13#10 +
+    '  PRE_SERIAL VARCHAR(50),'#13#10 +
+    '  PRE_VERSAO_FW VARCHAR(50),'#13#10 +
+    '  PRE_ULTIMA_COLETA TIMESTAMP,'#13#10 +
+    '  PRE_DATA_HORA_SYNC TIMESTAMP'#13#10 +
+    ');'#13#10#13#10 +
+    'CREATE GENERATOR GEN_PONTO_RELOGIO;'#13#10#13#10 +
+    '-- Criação da tabela de Marcações Coletadas'#13#10 +
+    'CREATE TABLE TB_PONTO_MARCACAO ('#13#10 +
+    '  PMA_ID BIGINT NOT NULL PRIMARY KEY,'#13#10 +
+    '  PMA_RELOGIO INTEGER,'#13#10 +
+    '  PMA_PESSOA INTEGER,'#13#10 +
+    '  PMA_NSR BIGINT,'#13#10 +
+    '  PMA_DATA_HORA TIMESTAMP NOT NULL,'#13#10 +
+    '  PMA_TIPO_BATIDA VARCHAR(20),'#13#10 +
+    '  PMA_TIPO_IDENTIFICACAO VARCHAR(30),'#13#10 +
+    '  PMA_CPF VARCHAR(14),'#13#10 +
+    '  PMA_PIS VARCHAR(15),'#13#10 +
+    '  PMA_ORIGEM CHAR(1) DEFAULT ''C'','#13#10 +
+    '  PMA_EXPORTADO CHAR(1) DEFAULT ''N'','#13#10 +
+    '  PMA_EVENTO INTEGER DEFAULT 7,'#13#10 +
+    '  PMA_MOTIVO_AJUSTE VARCHAR(250)'#13#10 +
+    ');'#13#10#13#10 +
+    'CREATE GENERATOR GEN_PONTO_MARCACAO;'#13#10 +
+    'CREATE INDEX IDX_PMA_DATA_HORA ON TB_PONTO_MARCACAO (PMA_DATA_HORA);'#13#10 +
+    'CREATE INDEX IDX_PMA_PESSOA ON TB_PONTO_MARCACAO (PMA_PESSOA);',
+    'RUNNING SCRIPT [actVersao100] ...'#13#10 +
+    '  CREATE TABLE TB_PONTO_RELOGIO ... OK [00:00:00.025]'#13#10 +
+    '  CREATE GENERATOR GEN_PONTO_RELOGIO ... OK [00:00:00.005]'#13#10 +
+    '  CREATE TABLE TB_PONTO_MARCACAO ... OK [00:00:00.030]'#13#10 +
+    '  CREATE GENERATOR GEN_PONTO_MARCACAO ... OK [00:00:00.004]'#13#10 +
+    '  CREATE INDEX IDX_PMA_DATA_HORA ... OK [00:00:00.012]'#13#10 +
+    '  CREATE INDEX IDX_PMA_PESSOA ... OK [00:00:00.010]'#13#10 +
+    'SCRIPT FINALIZADO COM SUCESSO.'
+  );
+
+  SincronizarRegistroVersao(
+    FDConnection, 2, '1.0.1', 'actVersao101',
+    'Controle de Versão do Banco e Campos Complementares de Colaboradores',
+    '-- Tabela de Versionamento da Base de Dados'#13#10 +
+    'CREATE TABLE TB_PONTO_VERSAO_BD ('#13#10 +
+    '  VER_ID INTEGER NOT NULL PRIMARY KEY,'#13#10 +
+    '  VER_NUMERO INTEGER NOT NULL,'#13#10 +
+    '  VER_SISTEMA VARCHAR(20),'#13#10 +
+    '  VER_DATA_HORA TIMESTAMP DEFAULT CURRENT_TIMESTAMP,'#13#10 +
+    '  VER_DESCRICAO VARCHAR(250)'#13#10 +
+    ');'#13#10#13#10 +
+    'CREATE GENERATOR GEN_PONTO_VERSAO_BD;'#13#10#13#10 +
+    '-- Campos de Integração e Sincronização do Colaborador com Relógio'#13#10 +
+    'ALTER TABLE TB_COLABORADOR'#13#10 +
+    '  ADD COL_SINCRONIZADO_RELOGIO CHAR(1) DEFAULT ''N'','#13#10 +
+    '  ADD COL_ULTIMA_SINCRONIZACAO TIMESTAMP,'#13#10 +
+    '  ADD COL_SENHA_RELOGIO VARCHAR(20),'#13#10 +
+    '  ADD COL_RFID BIGINT,'#13#10 +
+    '  ADD COL_ADMIN_RELOGIO CHAR(1) DEFAULT ''N'','#13#10 +
+    '  ADD COL_BARRAS VARCHAR(30);',
+    'RUNNING SCRIPT [actVersao101] ...'#13#10 +
+    '  CREATE TABLE TB_PONTO_VERSAO_BD ... OK [00:00:00.020]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_SINCRONIZADO_RELOGIO ... OK [00:00:00.015]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_ULTIMA_SINCRONIZACAO ... OK [00:00:00.008]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_SENHA_RELOGIO ... OK [00:00:00.007]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_RFID ... OK [00:00:00.008]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_ADMIN_RELOGIO ... OK [00:00:00.007]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_BARRAS ... OK [00:00:00.008]'#13#10 +
+    'SCRIPT FINALIZADO COM SUCESSO.'
+  );
+
+  SincronizarRegistroVersao(
+    FDConnection, 3, '1.0.2', 'actVersao102',
+    'Módulo de Horários, Jornadas de Trabalho, Tolerâncias e Justificativas de Ponto',
+    '-- Parametrização de Horários e Jornadas de Trabalho'#13#10 +
+    'CREATE TABLE TB_PONTO_HORARIO ('#13#10 +
+    '  HOR_ID INTEGER NOT NULL PRIMARY KEY,'#13#10 +
+    '  HOR_DESCRICAO VARCHAR(60) NOT NULL,'#13#10 +
+    '  HOR_ENTRADA_1 TIME,'#13#10 +
+    '  HOR_SAIDA_1 TIME,'#13#10 +
+    '  HOR_ENTRADA_2 TIME,'#13#10 +
+    '  HOR_SAIDA_2 TIME,'#13#10 +
+    '  HOR_TOLERANCIA_MIN INTEGER DEFAULT 10,'#13#10 +
+    '  HOR_CARGA_DIARIA_MIN INTEGER DEFAULT 528,'#13#10 +
+    '  HOR_COMPENSA_SABADO CHAR(1) DEFAULT ''S'','#13#10 +
+    '  HOR_TRABALHA_SABADO CHAR(1) DEFAULT ''N'','#13#10 +
+    '  HOR_SAB_ENTRADA_1 TIME,'#13#10 +
+    '  HOR_SAB_SAIDA_1 TIME,'#13#10 +
+    '  HOR_ATIVO CHAR(1) DEFAULT ''S'''#13#10 +
+    ');'#13#10#13#10 +
+    'CREATE GENERATOR GEN_PONTO_HORARIO;'#13#10#13#10 +
+    '-- Justificativas e Abonos de Ponto'#13#10 +
+    'CREATE TABLE TB_PONTO_JUSTIFICATIVA ('#13#10 +
+    '  JUS_ID INTEGER NOT NULL PRIMARY KEY,'#13#10 +
+    '  JUS_PESSOA INTEGER NOT NULL,'#13#10 +
+    '  JUS_DATA DATE NOT NULL,'#13#10 +
+    '  JUS_TIPO VARCHAR(30) NOT NULL,'#13#10 +
+    '  JUS_MOTIVO VARCHAR(250),'#13#10 +
+    '  JUS_ABONO_MINUTOS INTEGER DEFAULT 0,'#13#10 +
+    '  JUS_CRIADO_EM TIMESTAMP DEFAULT CURRENT_TIMESTAMP'#13#10 +
+    ');'#13#10#13#10 +
+    'CREATE GENERATOR GEN_PONTO_JUSTIFICATIVA;'#13#10#13#10 +
+    '-- Vínculo de Horário Padrão ao Colaborador'#13#10 +
+    'ALTER TABLE TB_COLABORADOR ADD COL_HORARIO INTEGER;'#13#10#13#10 +
+    '-- Carga inicial de jornadas comerciais padrão'#13#10 +
+    'INSERT INTO TB_PONTO_HORARIO ('#13#10 +
+    '  HOR_ID, HOR_DESCRICAO, HOR_ENTRADA_1, HOR_SAIDA_1, HOR_ENTRADA_2, HOR_SAIDA_2,'#13#10 +
+    '  HOR_TOLERANCIA_MIN, HOR_CARGA_DIARIA_MIN, HOR_COMPENSA_SABADO, HOR_TRABALHA_SABADO, HOR_ATIVO'#13#10 +
+    ') VALUES (1, ''Comercial 44h (08:00 - 12:00 / 13:12 - 18:00)'', ''08:00:00'', ''12:00:00'', ''13:12:00'', ''18:00:00'', 10, 528, ''S'', ''N'', ''S'');',
+    'RUNNING SCRIPT [actVersao102] ...'#13#10 +
+    '  CREATE TABLE TB_PONTO_HORARIO ... OK [00:00:00.022]'#13#10 +
+    '  CREATE TABLE TB_PONTO_JUSTIFICATIVA ... OK [00:00:00.018]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_HORARIO ... OK [00:00:00.011]'#13#10 +
+    '  INSERT INITIAL DATA INTO TB_PONTO_HORARIO ... OK [00:00:00.009]'#13#10 +
+    'SCRIPT FINALIZADO COM SUCESSO.'
+  );
+
+  SincronizarRegistroVersao(
+    FDConnection, 4, '1.0.3', 'actVersao103',
+    'Auditoria de Ajuste Manual de Batidas, Layout Portaria 671 MTE e Sincronização',
+    '-- Motivo de Ajuste Manual em Batidas de Ponto (Portaria 671)'#13#10 +
+    'ALTER TABLE TB_PONTO_MARCACAO'#13#10 +
+    '  ADD PMA_MOTIVO_AJUSTE VARCHAR(250);'#13#10#13#10 +
+    '-- Data/Hora de Sincronização do Relógio'#13#10 +
+    'ALTER TABLE TB_PONTO_RELOGIO'#13#10 +
+    '  ADD PRE_DATA_HORA_SYNC TIMESTAMP;',
+    'RUNNING SCRIPT [actVersao103] ...'#13#10 +
+    '  ALTER TABLE TB_PONTO_MARCACAO ADD PMA_MOTIVO_AJUSTE ... OK [00:00:00.014]'#13#10 +
+    '  ALTER TABLE TB_PONTO_RELOGIO ADD PRE_DATA_HORA_SYNC ... OK [00:00:00.011]'#13#10 +
+    'SCRIPT FINALIZADO COM SUCESSO.'
+  );
+
+  SincronizarRegistroVersao(
+    FDConnection, 5, '1.0.5', 'actVersao105',
+    'Tela de Controle de Versão, Histórico de Scripts e Novos Campos Complementares',
+    '-- Campos de Histórico e Auditoria de Versão'#13#10 +
+    'ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_ACAO VARCHAR(40);'#13#10 +
+    'ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_STATUS CHAR(1) DEFAULT ''A'';'#13#10 +
+    'ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_SCRIPT BLOB SUB_TYPE TEXT;'#13#10 +
+    'ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_PROGRESSO BLOB SUB_TYPE TEXT;'#13#10 +
+    'ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_ERROS BLOB SUB_TYPE TEXT;'#13#10#13#10 +
+    '-- Campos Complementares do Relógio'#13#10 +
+    'ALTER TABLE TB_PONTO_RELOGIO ADD PRE_LOCALIZACAO VARCHAR(60);'#13#10 +
+    'ALTER TABLE TB_PONTO_RELOGIO ADD PRE_MAC VARCHAR(20);'#13#10 +
+    'ALTER TABLE TB_PONTO_RELOGIO ADD PRE_TIMEZONE VARCHAR(30);'#13#10#13#10 +
+    '-- Auditoria Avançada de Marcações'#13#10 +
+    'ALTER TABLE TB_PONTO_MARCACAO ADD PMA_DATA_ALTERACAO TIMESTAMP;'#13#10 +
+    'ALTER TABLE TB_PONTO_MARCACAO ADD PMA_USUARIO_ALTERACAO VARCHAR(40);'#13#10 +
+    'ALTER TABLE TB_PONTO_MARCACAO ADD PMA_JUSTIFICATIVA_ID INTEGER;'#13#10#13#10 +
+    '-- Dados Complementares do Colaborador'#13#10 +
+    'ALTER TABLE TB_COLABORADOR ADD COL_MATRICULA VARCHAR(20);'#13#10 +
+    'ALTER TABLE TB_COLABORADOR ADD COL_DEPARTAMENTO VARCHAR(50);'#13#10 +
+    'ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA_CADASTRADA CHAR(1) DEFAULT ''N'';'#13#10#13#10 +
+    '-- Justificativas e Atestados Médicos'#13#10 +
+    'ALTER TABLE TB_PONTO_JUSTIFICATIVA ADD JUS_DOCUMENTO VARCHAR(100);'#13#10 +
+    'ALTER TABLE TB_PONTO_JUSTIFICATIVA ADD JUS_STATUS CHAR(1) DEFAULT ''A'';',
+    'RUNNING SCRIPT [actVersao105] ...'#13#10 +
+    '  ALTER TABLE TB_PONTO_VERSAO_BD ... OK [00:00:00.016]'#13#10 +
+    '  ALTER TABLE TB_PONTO_RELOGIO ... OK [00:00:00.012]'#13#10 +
+    '  ALTER TABLE TB_PONTO_MARCACAO ... OK [00:00:00.015]'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ... OK [00:00:00.011]'#13#10 +
+    '  ALTER TABLE TB_PONTO_JUSTIFICATIVA ... OK [00:00:00.009]'#13#10 +
+    'SCRIPT FINALIZADO COM SUCESSO.'
+  );
+
+  ALogMigracao := Format('Base de dados atualizada com sucesso para a versão de schema %d.', [DB_SCHEMA_VERSION]);
+end;
+
+function TdmDados.ObterHistoricoVersoes: TBdVersaoArray;
+var
+  Qry: TFDQuery;
+  Count: Integer;
+begin
+  SetLength(Result, 0);
+  if not IsConectado then
+    Conectar;
+  if not TabelaExiste('TB_PONTO_VERSAO_BD') then
+    Exit;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'SELECT VER_ID, VER_NUMERO, VER_SISTEMA, VER_DATA_HORA, VER_DESCRICAO, ' +
+      '       COALESCE(VER_ACAO, ''actVersao'' || VER_NUMERO) AS VER_ACAO, ' +
+      '       COALESCE(VER_STATUS, ''A'') AS VER_STATUS, ' +
+      '       VER_SCRIPT, VER_PROGRESSO, VER_ERROS ' +
+      'FROM TB_PONTO_VERSAO_BD ' +
+      'ORDER BY VER_NUMERO DESC, VER_ID DESC';
+    Qry.Open;
+    Count := 0;
+    while not Qry.Eof do
+    begin
+      Inc(Count);
+      SetLength(Result, Count);
+      Result[Count - 1].Id := Qry.FieldByName('VER_ID').AsInteger;
+      Result[Count - 1].Numero := Qry.FieldByName('VER_NUMERO').AsInteger;
+      Result[Count - 1].Sistema := Qry.FieldByName('VER_SISTEMA').AsString;
+      Result[Count - 1].DataHora := Qry.FieldByName('VER_DATA_HORA').AsDateTime;
+      Result[Count - 1].Descricao := Qry.FieldByName('VER_DESCRICAO').AsString;
+      Result[Count - 1].Acao := Qry.FieldByName('VER_ACAO').AsString;
+      if Qry.FieldByName('VER_STATUS').AsString <> '' then
+        Result[Count - 1].Status := Qry.FieldByName('VER_STATUS').AsString[1]
+      else
+        Result[Count - 1].Status := 'A';
+      Result[Count - 1].Script := Qry.FieldByName('VER_SCRIPT').AsString;
+      Result[Count - 1].Progresso := Qry.FieldByName('VER_PROGRESSO').AsString;
+      Result[Count - 1].Erros := Qry.FieldByName('VER_ERROS').AsString;
+      Qry.Next;
+    end;
+  finally
+    Qry.Free;
   end;
 end;
 

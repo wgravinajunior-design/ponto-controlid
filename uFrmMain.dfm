@@ -1432,21 +1432,47 @@ object frmMain: TfrmMain
       Caption = '  Configura'#231#245'es  '
       ImageIndex = 4
       TabVisible = False
-      object btnConfigVoltar: TButton
-        Left = 450
-        Top = 470
-        Width = 180
-        Height = 40
-        Caption = 'Voltar ao Sistema'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -12
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        TabOrder = 5
-        OnClick = btnConfigVoltarClick
-      end
+      object pgcConfig: TPageControl
+        Left = 0
+        Top = 0
+        Width = 1092
+        Height = 580
+        ActivePage = tabCfgParametros
+        Align = alClient
+        TabOrder = 0
+        object tabCfgParametros: TTabSheet
+          Caption = '  Geral e Conex'#227'o  '
+          ImageIndex = 0
+          object btnConfigVoltar: TButton
+            Left = 450
+            Top = 470
+            Width = 180
+            Height = 40
+            Caption = 'Voltar ao Sistema'
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 5
+            OnClick = btnConfigVoltarClick
+          end
+          object btnIrParaVersoes: TButton
+            Left = 650
+            Top = 470
+            Width = 240
+            Height = 40
+            Caption = 'Ver Controle de Vers'#227'o (Log)'
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 6
+            OnClick = btnIrParaVersoesClick
+          end
       object grpBanco: TGroupBox
         Left = 30
         Top = 20
@@ -1983,6 +2009,371 @@ object frmMain: TfrmMain
           ParentFont = False
           TabOrder = 10
           OnClick = btnLerEmpRelogioClick
+        end
+      end
+    end
+    object tabCfgVersoes: TTabSheet
+          Caption = '  Controle de Vers'#227'o  '
+          ImageIndex = 1
+          object pnlVersaoHeader: TPanel
+            Left = 0
+            Top = 0
+            Width = 1084
+            Height = 46
+            Align = alTop
+            BevelOuter = bvNone
+            Color = 16382457
+            ParentBackground = False
+            TabOrder = 0
+            object lblVersaoTitulo: TLabel
+              Left = 16
+              Top = 11
+              Width = 148
+              Height = 21
+              Caption = 'Controle de Vers'#227'o'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = 3355443
+              Font.Height = -16
+              Font.Name = 'Segoe UI'
+              Font.Style = [fsBold]
+              ParentFont = False
+            end
+            object lblPesquisarVersao: TLabel
+              Left = 690
+              Top = 14
+              Width = 53
+              Height = 15
+              Anchors = [akTop, akRight]
+              Caption = 'Pesquisar:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clGrayText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object edtPesquisarVersao: TEdit
+              Left = 750
+              Top = 10
+              Width = 318
+              Height = 25
+              Anchors = [akTop, akRight]
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 0
+              TextHint = 'Digite para pesquisar...'
+              OnChange = edtPesquisarVersaoChange
+            end
+          end
+          object pnlVersaoFooter: TPanel
+            Left = 0
+            Top = 500
+            Width = 1084
+            Height = 52
+            Align = alBottom
+            BevelOuter = bvNone
+            Color = 16119285
+            ParentBackground = False
+            TabOrder = 1
+            object btnVersaoAtualizar: TButton
+              Left = 16
+              Top = 8
+              Width = 160
+              Height = 36
+              Caption = 'Atualizar [F4]'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 0
+              OnClick = btnVersaoAtualizarClick
+            end
+            object btnVersaoSair: TButton
+              Left = 948
+              Top = 8
+              Width = 120
+              Height = 36
+              Anchors = [akTop, akRight]
+              Caption = 'Sair [ESC]'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 1
+              OnClick = btnVersaoSairClick
+            end
+          end
+          object pnlVersaoBody: TPanel
+            Left = 0
+            Top = 46
+            Width = 1084
+            Height = 454
+            Align = alClient
+            BevelOuter = bvNone
+            TabOrder = 2
+            object pnlVersaoEsq: TPanel
+              Left = 0
+              Top = 0
+              Width = 540
+              Height = 454
+              Align = alLeft
+              BevelOuter = bvNone
+              TabOrder = 0
+              object grpVersoes: TGroupBox
+                Left = 0
+                Top = 0
+                Width = 540
+                Height = 454
+                Align = alClient
+                Caption = ' Vers'#245'es '
+                Font.Charset = DEFAULT_CHARSET
+                Font.Color = clWindowText
+                Font.Height = -12
+                Font.Name = 'Segoe UI'
+                Font.Style = [fsBold]
+                ParentFont = False
+                TabOrder = 0
+                object dbgVersoes: TDBGrid
+                  Left = 2
+                  Top = 18
+                  Width = 536
+                  Height = 372
+                  Align = alClient
+                  DataSource = dsVersoes
+                  Font.Charset = DEFAULT_CHARSET
+                  Font.Color = clWindowText
+                  Font.Height = -12
+                  Font.Name = 'Segoe UI'
+                  Font.Style = []
+                  Options = [dgTitles, dgIndicator, dgColumnResize, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection]
+                  ParentFont = False
+                  ReadOnly = True
+                  TabOrder = 0
+                  TitleFont.Charset = DEFAULT_CHARSET
+                  TitleFont.Color = clWindowText
+                  TitleFont.Height = -12
+                  TitleFont.Name = 'Segoe UI'
+                  TitleFont.Style = []
+                  OnDrawColumnCell = dbgVersoesDrawColumnCell
+                  Columns = <
+                    item
+                      Expanded = False
+                      FieldName = 'STATUS'
+                      Title.Caption = 'Status'
+                      Width = 45
+                      Visible = True
+                    end
+                    item
+                      Alignment = taRightJustify
+                      Expanded = False
+                      FieldName = 'CODIGO'
+                      Title.Caption = 'C'#243'digo'
+                      Width = 55
+                      Visible = True
+                    end
+                    item
+                      Expanded = False
+                      FieldName = 'VERSAO'
+                      Title.Caption = 'Vers'#227'o Software'
+                      Width = 110
+                      Visible = True
+                    end
+                    item
+                      Expanded = False
+                      FieldName = 'DATA_HORA'
+                      Title.Caption = 'Data e hora atualiza'#231#227'o'
+                      Width = 145
+                      Visible = True
+                    end
+                    item
+                      Expanded = False
+                      FieldName = 'ACAO'
+                      Title.Caption = 'A'#231#227'o'
+                      Width = 135
+                      Visible = True
+                    end>
+                end
+                object pnlVersaoContador: TPanel
+                  Left = 2
+                  Top = 390
+                  Width = 536
+                  Height = 24
+                  Align = alBottom
+                  BevelOuter = bvNone
+                  Color = 16382457
+                  ParentBackground = False
+                  TabOrder = 1
+                  object lblVersaoContador: TLabel
+                    Left = 8
+                    Top = 4
+                    Width = 54
+                    Height = 15
+                    Caption = '5 registros'
+                    Font.Charset = DEFAULT_CHARSET
+                    Font.Color = clGrayText
+                    Font.Height = -11
+                    Font.Name = 'Segoe UI'
+                    Font.Style = []
+                    ParentFont = False
+                  end
+                end
+                object pnlVersaoLegenda: TPanel
+                  Left = 2
+                  Top = 414
+                  Width = 536
+                  Height = 38
+                  Align = alBottom
+                  BevelOuter = bvNone
+                  Color = clWhite
+                  ParentBackground = False
+                  TabOrder = 2
+                  object pbLegenda: TPaintBox
+                    Left = 0
+                    Top = 0
+                    Width = 536
+                    Height = 38
+                    Align = alClient
+                    OnPaint = pbLegendaPaint
+                  end
+                end
+              end
+            end
+            object splVersao: TSplitter
+              Left = 540
+              Top = 0
+              Width = 6
+              Height = 454
+            end
+            object pnlVersaoDir: TPanel
+              Left = 546
+              Top = 0
+              Width = 538
+              Height = 454
+              Align = alClient
+              BevelOuter = bvNone
+              TabOrder = 1
+              object grpScript: TGroupBox
+                Left = 0
+                Top = 0
+                Width = 538
+                Height = 220
+                Align = alTop
+                Caption = ' Script '
+                Font.Charset = DEFAULT_CHARSET
+                Font.Color = clWindowText
+                Font.Height = -12
+                Font.Name = 'Segoe UI'
+                Font.Style = [fsBold]
+                ParentFont = False
+                TabOrder = 0
+                object mmoScript: TMemo
+                  Left = 2
+                  Top = 18
+                  Width = 534
+                  Height = 200
+                  Align = alClient
+                  Font.Charset = ANSI_CHARSET
+                  Font.Color = clWindowText
+                  Font.Height = -12
+                  Font.Name = 'Consolas'
+                  Font.Style = []
+                  ParentFont = False
+                  ReadOnly = True
+                  ScrollBars = ssBoth
+                  TabOrder = 0
+                  WordWrap = False
+                end
+              end
+              object splScriptProg: TSplitter
+                Left = 0
+                Top = 220
+                Width = 538
+                Height = 5
+                Cursor = crVSplit
+                Align = alTop
+              end
+              object grpProgresso: TGroupBox
+                Left = 0
+                Top = 225
+                Width = 538
+                Height = 120
+                Align = alTop
+                Caption = ' Progresso '
+                Font.Charset = DEFAULT_CHARSET
+                Font.Color = clWindowText
+                Font.Height = -12
+                Font.Name = 'Segoe UI'
+                Font.Style = [fsBold]
+                ParentFont = False
+                TabOrder = 1
+                object mmoProgresso: TMemo
+                  Left = 2
+                  Top = 18
+                  Width = 534
+                  Height = 100
+                  Align = alClient
+                  Font.Charset = ANSI_CHARSET
+                  Font.Color = clWindowText
+                  Font.Height = -12
+                  Font.Name = 'Consolas'
+                  Font.Style = []
+                  ParentFont = False
+                  ReadOnly = True
+                  ScrollBars = ssBoth
+                  TabOrder = 0
+                  WordWrap = False
+                end
+              end
+              object splProgErros: TSplitter
+                Left = 0
+                Top = 345
+                Width = 538
+                Height = 5
+                Cursor = crVSplit
+                Align = alTop
+              end
+              object grpErros: TGroupBox
+                Left = 0
+                Top = 350
+                Width = 538
+                Height = 104
+                Align = alClient
+                Caption = ' Erros '
+                Font.Charset = DEFAULT_CHARSET
+                Font.Color = clWindowText
+                Font.Height = -12
+                Font.Name = 'Segoe UI'
+                Font.Style = [fsBold]
+                ParentFont = False
+                TabOrder = 2
+                object mmoErros: TMemo
+                  Left = 2
+                  Top = 18
+                  Width = 534
+                  Height = 84
+                  Align = alClient
+                  Font.Charset = ANSI_CHARSET
+                  Font.Color = clWindowText
+                  Font.Height = -12
+                  Font.Name = 'Consolas'
+                  Font.Style = []
+                  ParentFont = False
+                  ReadOnly = True
+                  ScrollBars = ssBoth
+                  TabOrder = 0
+                  WordWrap = False
+                end
+              end
+            end
+          end
         end
       end
     end
@@ -2681,6 +3072,23 @@ object frmMain: TfrmMain
     DefaultExt = 'txt'
     Filter = 'Arquivo Texto (*.txt)|*.txt|Todos os Arquivos (*.*)|*.*'
     Left = 416
+    Top = 16
+  end
+  object mtVersoes: TFDMemTable
+    FetchOptions.AssignedValues = [evMode]
+    FetchOptions.Mode = fmAll
+    ResourceOptions.AssignedValues = [rvSilentMode]
+    ResourceOptions.SilentMode = True
+    UpdateOptions.AssignedValues = [uvCheckRequired, uvAutoCommitUpdates]
+    UpdateOptions.CheckRequired = False
+    UpdateOptions.AutoCommitUpdates = True
+    AfterScroll = mtVersoesAfterScroll
+    Left = 496
+    Top = 16
+  end
+  object dsVersoes: TDataSource
+    DataSet = mtVersoes
+    Left = 560
     Top = 16
   end
 end
