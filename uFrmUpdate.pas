@@ -129,6 +129,7 @@ begin
   try
     Client.CustomHeaders['User-Agent'] := 'PontoControlID-Updater';
     Client.CustomHeaders['Accept'] := 'application/vnd.github.v3+json';
+    Client.HandleRedirects := True;
     Client.ConnectionTimeout := 5000;
     Client.ResponseTimeout := 8000;
 
@@ -347,6 +348,7 @@ begin
       Client := THTTPClient.Create;
       try
         Client.CustomHeaders['User-Agent'] := 'PontoControlID-Updater';
+        Client.HandleRedirects := True;
         Client.ConnectionTimeout := 8000;
         Client.ResponseTimeout := 30000;
         Client.OnReceiveData := HttpReceiveData;
