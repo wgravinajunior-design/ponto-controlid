@@ -23,7 +23,13 @@ Write-Host "==========================================================" -Foregro
 Write-Host "  Workflow de Build & Release (Delphi 12 Athens)" -ForegroundColor Cyan
 Write-Host "==========================================================" -ForegroundColor Cyan
 
-# Localizar Git e GitHub CLI
+# Localizar Git e GitHub CLI e garantir no PATH
+if (Test-Path "C:\Program Files\Git\cmd") {
+    $env:Path = "C:\Program Files\Git\cmd;" + $env:Path
+}
+if (Test-Path "C:\Program Files\GitHub CLI") {
+    $env:Path = "C:\Program Files\GitHub CLI;" + $env:Path
+}
 $GitCmd = if (Get-Command git -ErrorAction SilentlyContinue) { "git" } elseif (Test-Path "C:\Program Files\Git\cmd\git.exe") { "C:\Program Files\Git\cmd\git.exe" } else { $null }
 $GhCmd  = if (Get-Command gh -ErrorAction SilentlyContinue) { "gh" } elseif (Test-Path "C:\Program Files\GitHub CLI\gh.exe") { "C:\Program Files\GitHub CLI\gh.exe" } else { $null }
 
