@@ -115,13 +115,16 @@ if ($ReleaseVersion) {
 
     # Criar ou atualizar release
     Write-Host "  -> Criando Release $ReleaseVersion no GitHub..." -ForegroundColor Yellow
-    $ReleaseCheck = & $GhCmd release view $ReleaseVersion 2>$null
-    if ($LASTEXITCODE -eq 0) {
+    $PrevEA = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    $ExistingReleases = & $GhCmd release list 2>$null
+    if ($ExistingReleases -and ($ExistingReleases -match [regex]::Escape($ReleaseVersion))) {
         Write-Host "  -> Release $ReleaseVersion ja existe. Atualizando binario..." -ForegroundColor Yellow
         & $GhCmd release upload $ReleaseVersion $ExePath --clobber
     } else {
         & $GhCmd release create $ReleaseVersion $ExePath --title "Versao $ReleaseVersion" --notes $ReleaseNotes
     }
+    $ErrorActionPreference = $PrevEA
 
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  [SUCESSO] Release $ReleaseVersion publicada com sucesso no GitHub!" -ForegroundColor Green
