@@ -255,8 +255,6 @@ type
     lblFootVersion: TLabel;
     lblFootSep1: TLabel;
     lblFootColeta: TLabel;
-    lblFootSep2: TLabel;
-    lblFootStatus: TLabel;
     lblFootEmpregador: TLabel;
     tmrAutoColeta: TTimer;
     dlgSave: TSaveDialog;
@@ -519,11 +517,9 @@ begin
   lblHeaderVersion.Caption := 'v' + APP_VERSION;
   lblFootVersion.Caption := '🏷️ v' + APP_VERSION;
   AtualizarStatusColeta('🔄 Coleta: Desativada', False);
-  AtualizarStatusMsg('Sistema Pronto');
-  LogMessage('🚀 Integrador Control iD iniciado com sucesso.');
+
   if dmDados.TestarConexao(Err) then
   begin
-    LogMessage('✅ Conexão com o banco de dados Firebird estabelecida com sucesso!');
     if dmDados.LastMigracaoLog <> '' then
       LogMessage('📦 ' + dmDados.LastMigracaoLog);
     CarregarRelogios;
@@ -550,46 +546,6 @@ begin
     else if FindCmdLineSwitch('tab_rel') then
       pgcMain.ActivePage := tabRelogios;
 
-    if FindCmdLineSwitch('force_update_button') then
-    begin
-      FLatestUpdateInfo.HasUpdate := True;
-      FLatestUpdateInfo.LatestVersion := '1.1.0';
-      FLatestUpdateInfo.ReleaseName := 'Versão 1.1.0 (Atualização Control iD)';
-      FLatestUpdateInfo.ReleaseNotes := '• Otimização no cálculo do espelho de ponto' + sLineBreak +
-                                        '• Sincronização automática aprimorada' + sLineBreak +
-                                        '• Correção de batidas manuais e abonos';
-      FLatestUpdateInfo.DownloadUrl := 'https://github.com/wgravinajunior-design/ponto-controlid/releases/download/v1.0.0/PontoControlID.exe';
-      FLatestUpdateInfo.AssetFileName := 'PontoControlID.exe';
-      FLatestUpdateInfo.AssetSize := 6150144;
-      btnTopUpdate.Caption := 'Atualizar p/ v1.1.0';
-      btnTopUpdate.Visible := False;
-      if Assigned(skTopUpdate) then
-      begin
-        skTopUpdate.Caption := '🚀 Nova Versão: v1.1.0';
-        skTopUpdate.Visible := True;
-      end;
-    end;
-
-    if FindCmdLineSwitch('test_update') then
-    begin
-      TThread.ForceQueue(nil,
-        procedure
-        var
-          TestInfo: TUpdateInfo;
-        begin
-          TestInfo.HasUpdate := True;
-          TestInfo.LatestVersion := '1.1.0';
-          TestInfo.ReleaseName := 'Versão 1.1.0 (Atualização Control iD)';
-          TestInfo.ReleaseNotes := '• Otimização no cálculo do espelho de ponto' + sLineBreak +
-                                   '• Sincronização automática aprimorada' + sLineBreak +
-                                   '• Correção de batidas manuais e abonos';
-          TestInfo.DownloadUrl := 'https://github.com/wgravinajunior-design/ponto-controlid/releases/download/v1.0.0/PontoControlID.exe';
-          TestInfo.AssetFileName := 'PontoControlID.exe';
-          TestInfo.AssetSize := 6150144;
-          TfrmUpdate.ExecutarAtualizacao(Self, TestInfo);
-        end);
-    end;
-
     if AppConfig.ControlID.AutoIniciarColeta then
     begin
       tmrAutoColeta.Interval := AppConfig.ControlID.IntervaloColetaSegundos * 1000;
@@ -601,12 +557,10 @@ begin
       end;
       btnQuickAuto.Caption := 'Auto: ON';
       AtualizarStatusColeta(Format('🔄 Coleta: Ativa (%ds)', [AppConfig.ControlID.IntervaloColetaSegundos]), True);
-      LogMessage(Format('🔄 Coleta automática ativa em segundo plano (intervalo: %d segundos).', [AppConfig.ControlID.IntervaloColetaSegundos]));
     end;
   end
   else
   begin
-    AtualizarStatusMsg('Erro de conexão com o banco Firebird');
     LogMessage('⚠️ Não foi possível conectar ao banco de dados Firebird: ' + FormatarErroAmigavel(Err), True);
     ShowMessage('Atenção: Verifique os parâmetros de conexão com o banco Firebird na aba Configurações.'#13#10 + Err);
     pgcMain.ActivePage := tabConfig;
@@ -650,15 +604,8 @@ begin
 end;
 
 procedure TfrmMain.AtualizarStatusMsg(const AMsg: string);
-var
-  CleanMsg: string;
 begin
-  if not Assigned(lblFootStatus) then Exit;
-  CleanMsg := AMsg;
-  if CleanMsg.StartsWith('[') and (Pos('] ', CleanMsg) > 0) then
-    Delete(CleanMsg, 1, Pos('] ', CleanMsg) + 1);
-
-  lblFootStatus.Caption := '⚡ ' + Copy(CleanMsg, 1, 60);
+  // Mensagem de status no rodapé removida conforme solicitado pelo usuário
 end;
 
 procedure TfrmMain.AtualizarEmpregadorRodape(const ARazao, ACnpj: string);
@@ -2148,9 +2095,11 @@ begin
         cmbEmpTipoDoc.ItemIndex := 0;
 
       AtualizarEmpregadorRodape(Razao, Cnpj);
-      LogMessage(Format('🏢 Dados do empregador [%s] carregados do banco de dados.', [Razao]));
       if Sender <> nil then
+      begin
+        LogMessage(Format('🏢 Dados do empregador [%s] carregados do banco de dados.', [Razao]));
         ShowMessage('Dados do empregador carregados do banco com sucesso!');
+      end;
     end
     else
     begin

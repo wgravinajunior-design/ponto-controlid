@@ -47,7 +47,7 @@ object frmMain: TfrmMain
       Top = 35
       Width = 34
       Height = 15
-      Caption = 'v1.0.2'
+      Caption = 'v1.0.3'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 16297272
       Font.Height = -12
@@ -2601,7 +2601,7 @@ object frmMain: TfrmMain
       Top = 8
       Width = 34
       Height = 15
-      Caption = 'v1.0.2'
+      Caption = 'v1.0.3'
       Font.Charset = DEFAULT_CHARSET
       Font.Color = 15921906
       Font.Height = -12
@@ -2633,32 +2633,6 @@ object frmMain: TfrmMain
       Font.Height = -12
       Font.Name = 'Segoe UI'
       Font.Style = [fsBold]
-      ParentFont = False
-    end
-    object lblFootSep2: TLabel
-      Left = 283
-      Top = 8
-      Width = 6
-      Height = 15
-      Caption = #9474
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = 9474192
-      Font.Height = -12
-      Font.Name = 'Segoe UI'
-      Font.Style = []
-      ParentFont = False
-    end
-    object lblFootStatus: TLabel
-      Left = 300
-      Top = 8
-      Width = 80
-      Height = 15
-      Caption = 'Sistema Pronto'
-      Font.Charset = DEFAULT_CHARSET
-      Font.Color = clSilver
-      Font.Height = -12
-      Font.Name = 'Segoe UI'
-      Font.Style = []
       ParentFont = False
     end
     object lblFootEmpregador: TLabel
