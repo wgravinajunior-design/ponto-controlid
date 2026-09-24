@@ -8,7 +8,7 @@ uses
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Grids,
   Vcl.DBGrids, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param,
   uConfig, uControlIDClient, uDataModule, uPontoService, uPontoCalculoService, uSkiaButtons,
-  System.Threading, uFrmUpdate;
+  uFrmUpdate;
 
 type
   TfrmMain = class(TForm)
@@ -456,6 +456,14 @@ begin
       Icon.Handle := LoadIcon(HInstance, 'MAINICON');
       Application.Icon.Handle := LoadIcon(HInstance, 'MAINICON');
     end;
+
+    if Icon.Handle <> 0 then
+    begin
+      SendMessage(Handle, WM_SETICON, 1 {ICON_BIG}, Icon.Handle);
+      SendMessage(Handle, WM_SETICON, 0 {ICON_SMALL}, Icon.Handle);
+      SetClassLong(Handle, -14 {GCL_HICON}, Icon.Handle);
+      SetClassLong(Handle, -34 {GCL_HICONSM}, Icon.Handle);
+    end;
   except
   end;
 
@@ -543,6 +551,12 @@ begin
   lblHeaderVersion.Caption := 'v' + APP_VERSION;
   lblFootVersion.Caption := '🏷️ v' + APP_VERSION;
   AtualizarStatusColeta('🔄 Coleta: Desativada', False);
+
+  if Icon.Handle <> 0 then
+  begin
+    SendMessage(Handle, WM_SETICON, 1, Icon.Handle);
+    SendMessage(Handle, WM_SETICON, 0, Icon.Handle);
+  end;
 
   if dmDados.TestarConexao(Err) then
   begin

@@ -21,6 +21,13 @@ begin
     Application.Initialize;
     Application.MainFormOnTaskbar := True;
     Application.Title := 'Integrador Ponto Control iD';
+    if FileExists(ExtractFilePath(ParamStr(0)) + 'PontoControlID_Icon.ico') then
+    begin
+      try
+        Application.Icon.LoadFromFile(ExtractFilePath(ParamStr(0)) + 'PontoControlID_Icon.ico');
+      except
+      end;
+    end;
     Application.CreateForm(TdmDados, dmDados);
     Application.CreateForm(TfrmMain, frmMain);
     Application.Run;
