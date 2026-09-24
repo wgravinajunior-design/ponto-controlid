@@ -536,6 +536,46 @@ begin
     else if FindCmdLineSwitch('tab_rel') then
       pgcMain.ActivePage := tabRelogios;
 
+    if FindCmdLineSwitch('force_update_button') then
+    begin
+      FLatestUpdateInfo.HasUpdate := True;
+      FLatestUpdateInfo.LatestVersion := '1.1.0';
+      FLatestUpdateInfo.ReleaseName := 'Versão 1.1.0 (Atualização Control iD)';
+      FLatestUpdateInfo.ReleaseNotes := '• Otimização no cálculo do espelho de ponto' + sLineBreak +
+                                        '• Sincronização automática aprimorada' + sLineBreak +
+                                        '• Correção de batidas manuais e abonos';
+      FLatestUpdateInfo.DownloadUrl := 'https://github.com/wgravinajunior-design/ponto-controlid/releases/download/v1.0.0/PontoControlID.exe';
+      FLatestUpdateInfo.AssetFileName := 'PontoControlID.exe';
+      FLatestUpdateInfo.AssetSize := 6150144;
+      btnTopUpdate.Caption := 'Atualizar p/ v1.1.0';
+      btnTopUpdate.Visible := False;
+      if Assigned(skTopUpdate) then
+      begin
+        skTopUpdate.Caption := '🚀 Nova Versão: v1.1.0';
+        skTopUpdate.Visible := True;
+      end;
+    end;
+
+    if FindCmdLineSwitch('test_update') then
+    begin
+      TThread.ForceQueue(nil,
+        procedure
+        var
+          TestInfo: TUpdateInfo;
+        begin
+          TestInfo.HasUpdate := True;
+          TestInfo.LatestVersion := '1.1.0';
+          TestInfo.ReleaseName := 'Versão 1.1.0 (Atualização Control iD)';
+          TestInfo.ReleaseNotes := '• Otimização no cálculo do espelho de ponto' + sLineBreak +
+                                   '• Sincronização automática aprimorada' + sLineBreak +
+                                   '• Correção de batidas manuais e abonos';
+          TestInfo.DownloadUrl := 'https://github.com/wgravinajunior-design/ponto-controlid/releases/download/v1.0.0/PontoControlID.exe';
+          TestInfo.AssetFileName := 'PontoControlID.exe';
+          TestInfo.AssetSize := 6150144;
+          TfrmUpdate.ExecutarAtualizacao(Self, TestInfo);
+        end);
+    end;
+
     if AppConfig.ControlID.AutoIniciarColeta then
     begin
       tmrAutoColeta.Interval := AppConfig.ControlID.IntervaloColetaSegundos * 1000;
@@ -1961,7 +2001,7 @@ begin
             begin
               FLatestUpdateInfo := Info;
               btnTopUpdate.Caption := 'Atualizar p/ v' + Info.LatestVersion;
-              btnTopUpdate.Visible := True;
+              btnTopUpdate.Visible := False;
               if Assigned(skTopUpdate) then
               begin
                 skTopUpdate.Caption := '🚀 Nova Versão: v' + Info.LatestVersion;
@@ -3046,7 +3086,7 @@ begin
   skTopUpdate := CriarBtn(btnTopUpdate, '🚀 Atualização!', sbkWarning, 12, 11, 17);
   skTopUpdate.Visible := False;
 
-  btnConfigVoltar.SetBounds(650, 20, 175, 38);
+  btnConfigVoltar.SetBounds(450, 470, 180, 40);
   skConfigVoltar := CriarBtn(btnConfigVoltar, '← Voltar ao Sistema', sbkPrimary, 10, 10.5, 15);
 
   // Log do Dashboard

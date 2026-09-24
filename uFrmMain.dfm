@@ -31,7 +31,7 @@ object frmMain: TfrmMain
     TabOrder = 0
     object lblTitle: TLabel
       Left = 20
-      Top = 14
+      Top = 28
       Width = 164
       Height = 25
       Caption = 'Controle de Ponto'
@@ -1407,10 +1407,10 @@ object frmMain: TfrmMain
       ImageIndex = 4
       TabVisible = False
       object btnConfigVoltar: TButton
-        Left = 650
-        Top = 20
-        Width = 175
-        Height = 38
+        Left = 450
+        Top = 470
+        Width = 180
+        Height = 40
         Caption = 'Voltar ao Sistema'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWindowText
@@ -1418,7 +1418,7 @@ object frmMain: TfrmMain
         Font.Name = 'Segoe UI'
         Font.Style = [fsBold]
         ParentFont = False
-        TabOrder = 3
+        TabOrder = 5
         OnClick = btnConfigVoltarClick
       end
       object grpBanco: TGroupBox
