@@ -6,13 +6,14 @@ uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI, System.SysUtils, System.Variants,
   System.Classes, System.DateUtils, System.UITypes, System.Types, System.IOUtils, System.Math,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Grids,
-  Vcl.DBGrids, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param,
+  Vcl.DBGrids, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param,
   uConfig, uControlIDClient, uDataModule, uPontoService, uPontoCalculoService, uSkiaButtons,
   System.Threading, uFrmUpdate;
 
 type
   TfrmMain = class(TForm)
     pnlTop: TPanel;
+    imgTopLogo: TImage;
     lblTitle: TLabel;
     lblHeaderVersion: TLabel;
     btnTopConfig: TButton;
@@ -442,6 +443,31 @@ implementation
 procedure TfrmMain.FormCreate(Sender: TObject);
 begin
   WindowState := wsMaximized;
+
+  // Carregar ícone da aplicação e janela (Desktop e Barra de Tarefas)
+  try
+    if FileExists(ExtractFilePath(Application.ExeName) + 'PontoControlID_Icon.ico') then
+    begin
+      Icon.LoadFromFile(ExtractFilePath(Application.ExeName) + 'PontoControlID_Icon.ico');
+      Application.Icon.LoadFromFile(ExtractFilePath(Application.ExeName) + 'PontoControlID_Icon.ico');
+    end
+    else
+    begin
+      Icon.Handle := LoadIcon(HInstance, 'MAINICON');
+      Application.Icon.Handle := LoadIcon(HInstance, 'MAINICON');
+    end;
+  except
+  end;
+
+  // Carregar logo visual no cabeçalho superior esquerdo
+  try
+    if FileExists(ExtractFilePath(Application.ExeName) + 'app_logo.png') then
+      imgTopLogo.Picture.LoadFromFile(ExtractFilePath(Application.ExeName) + 'app_logo.png')
+    else if FileExists(ExtractFilePath(Application.ExeName) + 'logo.jpg') then
+      imgTopLogo.Picture.LoadFromFile(ExtractFilePath(Application.ExeName) + 'logo.jpg');
+  except
+  end;
+
   FPontoService := TPontoService.Create(LogMessage);
 
   FdsRelogios := TDataSource.Create(Self);
@@ -3094,10 +3120,10 @@ begin
     skQuickAuto := CriarBtn(btnQuickAuto, '🔄 Auto: OFF', sbkDark, 12, 11, 17);
 
   // Ações de Topo Esquerda - Configurações e Atualizações
-  btnTopConfig.SetBounds(255, 21, 145, 42);
+  btnTopConfig.SetBounds(320, 21, 145, 42);
   skTopConfig := CriarBtn(btnTopConfig, '⚙️ Configurações', sbkDark, 12, 11, 17);
 
-  btnTopUpdate.SetBounds(410, 21, 220, 42);
+  btnTopUpdate.SetBounds(480, 21, 220, 42);
   skTopUpdate := CriarBtn(btnTopUpdate, '🚀 Atualização!', sbkWarning, 12, 11, 17);
   skTopUpdate.Visible := False;
 

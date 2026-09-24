@@ -29,8 +29,16 @@ object frmMain: TfrmMain
     Color = 2761244
     ParentBackground = False
     TabOrder = 0
+    object imgTopLogo: TImage
+      Left = 16
+      Top = 16
+      Width = 52
+      Height = 52
+      Proportional = True
+      Stretch = True
+    end
     object lblTitle: TLabel
-      Left = 20
+      Left = 80
       Top = 28
       Width = 164
       Height = 25
@@ -43,7 +51,7 @@ object frmMain: TfrmMain
       ParentFont = False
     end
     object lblHeaderVersion: TLabel
-      Left = 192
+      Left = 252
       Top = 35
       Width = 34
       Height = 15
@@ -56,7 +64,7 @@ object frmMain: TfrmMain
       ParentFont = False
     end
     object btnTopConfig: TButton
-      Left = 255
+      Left = 320
       Top = 20
       Width = 145
       Height = 42
@@ -71,7 +79,7 @@ object frmMain: TfrmMain
       OnClick = btnTopConfigClick
     end
     object btnTopUpdate: TButton
-      Left = 410
+      Left = 480
       Top = 20
       Width = 220
       Height = 42
