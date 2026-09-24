@@ -42,8 +42,21 @@ object frmMain: TfrmMain
       Font.Style = [fsBold]
       ParentFont = False
     end
+    object lblHeaderVersion: TLabel
+      Left = 192
+      Top = 35
+      Width = 34
+      Height = 15
+      Caption = 'v1.0.0'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 16297272
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+    end
     object btnTopConfig: TButton
-      Left = 200
+      Left = 255
       Top = 20
       Width = 145
       Height = 42
@@ -58,9 +71,9 @@ object frmMain: TfrmMain
       OnClick = btnTopConfigClick
     end
     object btnTopUpdate: TButton
-      Left = 355
+      Left = 410
       Top = 20
-      Width = 230
+      Width = 220
       Height = 42
       Caption = 'Atualiza'#231#227'o Dispon'#237'vel'
       Font.Charset = DEFAULT_CHARSET
@@ -149,11 +162,12 @@ object frmMain: TfrmMain
     Left = 0
     Top = 85
     Width = 1100
-    Height = 610
+    Height = 603
     ActivePage = tabDashboard
     Align = alClient
     TabOrder = 1
     OnChange = pgcMainChange
+    ExplicitHeight = 610
     object tabDashboard: TTabSheet
       Caption = '  Painel de Monitoramento  '
       object pnlCards: TPanel
@@ -378,7 +392,7 @@ object frmMain: TfrmMain
         Left = 0
         Top = 130
         Width = 1092
-        Height = 450
+        Height = 443
         Align = alClient
         Color = 2105376
         Font.Charset = ANSI_CHARSET
@@ -390,6 +404,7 @@ object frmMain: TfrmMain
         ReadOnly = True
         ScrollBars = ssVertical
         TabOrder = 2
+        ExplicitHeight = 450
       end
     end
     object tabRelogios: TTabSheet
@@ -398,18 +413,20 @@ object frmMain: TfrmMain
       object splRelogio: TSplitter
         Left = 622
         Top = 0
-        Height = 580
+        Height = 573
         Align = alRight
         ExplicitLeft = 600
+        ExplicitHeight = 580
       end
       object pnlRelogiosGrid: TPanel
         Left = 0
         Top = 0
         Width = 622
-        Height = 580
+        Height = 573
         Align = alClient
         BevelOuter = bvNone
         TabOrder = 0
+        ExplicitHeight = 580
         object dbgRelogios: TDBGrid
           Left = 0
           Top = 45
@@ -473,12 +490,13 @@ object frmMain: TfrmMain
         Left = 625
         Top = 0
         Width = 467
-        Height = 580
+        Height = 573
         Align = alRight
         BevelOuter = bvNone
         Color = clWhitesmoke
         ParentBackground = False
         TabOrder = 1
+        ExplicitHeight = 580
         object lblFormTitle: TLabel
           Left = 20
           Top = 15
@@ -1389,7 +1407,7 @@ object frmMain: TfrmMain
         Left = 0
         Top = 65
         Width = 1092
-        Height = 515
+        Height = 508
         Align = alClient
         Options = [dgTitles, dgIndicator, dgColumnResize, dgColLines, dgRowLines, dgTabs, dgRowSelect, dgAlwaysShowSelection, dgConfirmDelete, dgCancelOnExit]
         ReadOnly = True
@@ -2360,7 +2378,7 @@ object frmMain: TfrmMain
         Left = 0
         Top = 65
         Width = 1092
-        Height = 445
+        Height = 438
         Align = alClient
         BorderStyle = bsNone
         ColCount = 13
@@ -2369,10 +2387,11 @@ object frmMain: TfrmMain
         Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
         TabOrder = 1
         OnDrawCell = grdEspelhoDrawCell
+        ExplicitHeight = 445
       end
       object pnlEspelhoResumo: TPanel
         Left = 0
-        Top = 510
+        Top = 503
         Width = 1092
         Height = 70
         Align = alBottom
@@ -2380,6 +2399,7 @@ object frmMain: TfrmMain
         Color = clWhite
         ParentBackground = False
         TabOrder = 2
+        ExplicitTop = 510
         object pnlCardEsp1: TPanel
           Left = 15
           Top = 10
@@ -2563,29 +2583,110 @@ object frmMain: TfrmMain
       end
     end
   end
-  object stbMain: TStatusBar
+  object pnlFooter: TPanel
     Left = 0
-    Top = 695
+    Top = 688
     Width = 1100
-    Height = 25
-    Panels = <
-      item
-        Text = 'Banco Firebird: Conectando...'
-        Width = 350
-      end
-      item
-        Text = 'Coleta Autom'#225'tica: Desativada'
-        Width = 250
-      end
-      item
-        Text = 'Status: Pronto'
-        Width = 300
-      end
-      item
-        Alignment = taRightJustify
-        Text = 'Delphi 12 Athens'
-        Width = 50
-      end>
+    Height = 32
+    Align = alBottom
+    BevelOuter = bvNone
+    Color = 2761244
+    ParentBackground = False
+    TabOrder = 2
+    DesignSize = (
+      1100
+      32)
+    object lblFootVersion: TLabel
+      Left = 16
+      Top = 8
+      Width = 34
+      Height = 15
+      Caption = 'v1.0.0'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 15921906
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+    end
+    object lblFootSep1: TLabel
+      Left = 82
+      Top = 8
+      Width = 6
+      Height = 15
+      Caption = #9474
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 9474192
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
+    object lblFootColeta: TLabel
+      Left = 98
+      Top = 8
+      Width = 102
+      Height = 15
+      Caption = 'Coleta: Desativada'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 16297272
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+    end
+    object lblFootSep2: TLabel
+      Left = 283
+      Top = 8
+      Width = 6
+      Height = 15
+      Caption = #9474
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = 9474192
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
+    object lblFootStatus: TLabel
+      Left = 300
+      Top = 8
+      Width = 80
+      Height = 15
+      Caption = 'Sistema Pronto'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clSilver
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = []
+      ParentFont = False
+    end
+    object lblFootEmpregador: TLabel
+      Left = 926
+      Top = 8
+      Width = 154
+      Height = 15
+      Alignment = taRightJustify
+      Anchors = [akTop, akRight]
+      Caption = 'Empregador n'#227'o cadastrado'
+      Font.Charset = DEFAULT_CHARSET
+      Font.Color = clWhite
+      Font.Height = -12
+      Font.Name = 'Segoe UI'
+      Font.Style = [fsBold]
+      ParentFont = False
+    end
+    object pnlFooterLine: TPanel
+      Left = 0
+      Top = 0
+      Width = 1100
+      Height = 1
+      Align = alTop
+      BevelOuter = bvNone
+      Color = 3945000
+      ParentBackground = False
+      TabOrder = 0
+    end
   end
   object tmrAutoColeta: TTimer
     Enabled = False

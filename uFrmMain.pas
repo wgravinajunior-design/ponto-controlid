@@ -14,6 +14,7 @@ type
   TfrmMain = class(TForm)
     pnlTop: TPanel;
     lblTitle: TLabel;
+    lblHeaderVersion: TLabel;
     btnTopConfig: TButton;
     btnTopUpdate: TButton;
     pnlQuickActions: TPanel;
@@ -249,7 +250,14 @@ type
     pnlCardEsp5: TPanel;
     lblCardEsp5Title: TLabel;
     lblCardEsp5Val: TLabel;
-    stbMain: TStatusBar;
+    pnlFooter: TPanel;
+    pnlFooterLine: TPanel;
+    lblFootVersion: TLabel;
+    lblFootSep1: TLabel;
+    lblFootColeta: TLabel;
+    lblFootSep2: TLabel;
+    lblFootStatus: TLabel;
+    lblFootEmpregador: TLabel;
     tmrAutoColeta: TTimer;
     dlgSave: TSaveDialog;
 
@@ -371,6 +379,9 @@ type
     procedure LimparFormColaborador;
     procedure PreencherFormColaborador(AQry: TDataSet);
     procedure CarregarRelogiosNoComboDestino;
+    procedure AtualizarStatusColeta(const ATexto: string; AAtiva: Boolean = False);
+    procedure AtualizarStatusMsg(const AMsg: string);
+    procedure AtualizarEmpregadorRodape(const ARazao, ACnpj: string);
   public
     // Botões Modernos Skia com Emojis Coloridos
     skTopConfig: TSkModernButton;
@@ -505,10 +516,13 @@ begin
   WindowState := wsMaximized;
   ShowWindow(Handle, SW_MAXIMIZE);
   ArredondarControles;
+  lblHeaderVersion.Caption := 'v' + APP_VERSION;
+  lblFootVersion.Caption := '🏷️ v' + APP_VERSION;
+  AtualizarStatusColeta('🔄 Coleta: Desativada', False);
+  AtualizarStatusMsg('Sistema Pronto');
   LogMessage('🚀 Integrador Control iD iniciado com sucesso.');
   if dmDados.TestarConexao(Err) then
   begin
-    stbMain.Panels[0].Text := 'Banco Firebird: CONECTADO (' + AppConfig.Firebird.Server + ')';
     LogMessage('✅ Conexão com o banco de dados Firebird estabelecida com sucesso!');
     if dmDados.LastMigracaoLog <> '' then
       LogMessage('📦 ' + dmDados.LastMigracaoLog);
@@ -586,13 +600,13 @@ begin
         skQuickAuto.Kind := sbkSuccess;
       end;
       btnQuickAuto.Caption := 'Auto: ON';
-      stbMain.Panels[1].Text := Format('Coleta Automática: ATIVA (%ds)', [AppConfig.ControlID.IntervaloColetaSegundos]);
+      AtualizarStatusColeta(Format('🔄 Coleta: Ativa (%ds)', [AppConfig.ControlID.IntervaloColetaSegundos]), True);
       LogMessage(Format('🔄 Coleta automática ativa em segundo plano (intervalo: %d segundos).', [AppConfig.ControlID.IntervaloColetaSegundos]));
     end;
   end
   else
   begin
-    stbMain.Panels[0].Text := 'Banco Firebird: ERRO DE CONEXÃO';
+    AtualizarStatusMsg('Erro de conexão com o banco Firebird');
     LogMessage('⚠️ Não foi possível conectar ao banco de dados Firebird: ' + FormatarErroAmigavel(Err), True);
     ShowMessage('Atenção: Verifique os parâmetros de conexão com o banco Firebird na aba Configurações.'#13#10 + Err);
     pgcMain.ActivePage := tabConfig;
@@ -620,7 +634,57 @@ begin
     FormattedMsg := FormatDateTime('[hh:nn:ss] ', Now) + AMsg;
 
   mmoLog.Lines.Add(FormattedMsg);
-  stbMain.Panels[2].Text := AMsg;
+  AtualizarStatusMsg(AMsg);
+end;
+
+procedure TfrmMain.AtualizarStatusColeta(const ATexto: string; AAtiva: Boolean);
+begin
+  if Assigned(lblFootColeta) then
+  begin
+    lblFootColeta.Caption := ATexto;
+    if AAtiva then
+      lblFootColeta.Font.Color := $0066FF66
+    else
+      lblFootColeta.Font.Color := 16297272;
+  end;
+end;
+
+procedure TfrmMain.AtualizarStatusMsg(const AMsg: string);
+var
+  CleanMsg: string;
+begin
+  if not Assigned(lblFootStatus) then Exit;
+  CleanMsg := AMsg;
+  if CleanMsg.StartsWith('[') and (Pos('] ', CleanMsg) > 0) then
+    Delete(CleanMsg, 1, Pos('] ', CleanMsg) + 1);
+
+  lblFootStatus.Caption := '⚡ ' + Copy(CleanMsg, 1, 60);
+end;
+
+procedure TfrmMain.AtualizarEmpregadorRodape(const ARazao, ACnpj: string);
+var
+  DocFmt, Digits, RazaoLimpa: string;
+begin
+  if not Assigned(lblFootEmpregador) then Exit;
+
+  Digits := OnlyDigits(ACnpj);
+  if Length(Digits) = 14 then
+    DocFmt := Format('%s.%s.%s/%s-%s', [Copy(Digits, 1, 2), Copy(Digits, 3, 3), Copy(Digits, 6, 3), Copy(Digits, 9, 4), Copy(Digits, 13, 2)])
+  else if Length(Digits) = 11 then
+    DocFmt := Format('%s.%s.%s-%s', [Copy(Digits, 1, 3), Copy(Digits, 4, 3), Copy(Digits, 7, 3), Copy(Digits, 10, 2)])
+  else
+    DocFmt := ACnpj;
+
+  RazaoLimpa := Trim(ARazao);
+  if RazaoLimpa <> '' then
+  begin
+    if Trim(DocFmt) <> '' then
+      lblFootEmpregador.Caption := Format('🏢 %s   •   CNPJ: %s', [RazaoLimpa, DocFmt])
+    else
+      lblFootEmpregador.Caption := Format('🏢 %s', [RazaoLimpa]);
+  end
+  else
+    lblFootEmpregador.Caption := '🏢 Empregador não cadastrado';
 end;
 
 procedure TfrmMain.CarregarConfigNaTela;
@@ -874,7 +938,7 @@ begin
       skQuickAuto.Kind := sbkSuccess;
     end;
     btnQuickAuto.Caption := 'Auto: ON';
-    stbMain.Panels[1].Text := Format('Coleta Automática: ATIVA (%ds)', [AppConfig.ControlID.IntervaloColetaSegundos]);
+    AtualizarStatusColeta(Format('🔄 Coleta: Ativa (%ds)', [AppConfig.ControlID.IntervaloColetaSegundos]), True);
     LogMessage(Format('▶️ Coleta automática ativada! Verificando marcações a cada %d segundos.', [AppConfig.ControlID.IntervaloColetaSegundos]));
   end
   else
@@ -885,7 +949,7 @@ begin
       skQuickAuto.Kind := sbkDark;
     end;
     btnQuickAuto.Caption := 'Auto: OFF';
-    stbMain.Panels[1].Text := 'Coleta Automática: PAUSADA';
+    AtualizarStatusColeta('🔄 Coleta: Desativada', False);
     LogMessage('⏸️ Coleta automática pausada pelo usuário.');
   end;
 end;
@@ -2049,13 +2113,13 @@ begin
   try
     if dmDados.TestarConexao(Err) then
     begin
-      stbMain.Panels[0].Text := 'Banco Firebird: CONECTADO';
+      AtualizarStatusMsg('Banco Firebird conectado com sucesso');
       LogMessage('🔌 Teste de conexão: Banco de dados Firebird conectado com sucesso!');
       ShowMessage('Conexão com o banco de dados Firebird realizada com sucesso!');
     end
     else
     begin
-      stbMain.Panels[0].Text := 'Banco Firebird: ERRO DE CONEXÃO';
+      AtualizarStatusMsg('Falha de conexão com o banco Firebird');
       LogMessage('❌ Falha no teste de conexão com o Firebird: ' + FormatarErroAmigavel(Err), True);
       ShowMessage('Falha ao conectar no banco Firebird:'#13#10 + Err);
     end;
@@ -2083,6 +2147,7 @@ begin
       else
         cmbEmpTipoDoc.ItemIndex := 0;
 
+      AtualizarEmpregadorRodape(Razao, Cnpj);
       LogMessage(Format('🏢 Dados do empregador [%s] carregados do banco de dados.', [Razao]));
       if Sender <> nil then
         ShowMessage('Dados do empregador carregados do banco com sucesso!');
@@ -2130,6 +2195,7 @@ begin
   try
     if dmDados.SalvarEmpresaPrincipal(Razao, Cnpj, Endereco) then
     begin
+      AtualizarEmpregadorRodape(Razao, Cnpj);
       LogMessage(Format('💾 Dados do empregador [%s] atualizados no banco de dados com sucesso.', [Razao]));
       ShowMessage('Dados do empregador salvos no banco com sucesso!');
     end
@@ -3079,10 +3145,10 @@ begin
     skQuickAuto := CriarBtn(btnQuickAuto, '🔄 Auto: OFF', sbkDark, 12, 11, 17);
 
   // Ações de Topo Esquerda - Configurações e Atualizações
-  btnTopConfig.SetBounds(200, 21, 145, 42);
+  btnTopConfig.SetBounds(255, 21, 145, 42);
   skTopConfig := CriarBtn(btnTopConfig, '⚙️ Configurações', sbkDark, 12, 11, 17);
 
-  btnTopUpdate.SetBounds(355, 21, 230, 42);
+  btnTopUpdate.SetBounds(410, 21, 220, 42);
   skTopUpdate := CriarBtn(btnTopUpdate, '🚀 Atualização!', sbkWarning, 12, 11, 17);
   skTopUpdate.Visible := False;
 
