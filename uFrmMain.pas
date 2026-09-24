@@ -474,6 +474,9 @@ type
     skLancarJustificativa: TSkModernButton;
     skCorrigirBatidaEspelho: TSkModernButton;
     skExportarEspelhoHTML: TSkModernButton;
+    skIrParaVersoes: TSkModernButton;
+    skVersaoAtualizar: TSkModernButton;
+    skVersaoSair: TSkModernButton;
   end;
 
 var
@@ -3450,16 +3453,13 @@ begin
   skTopUpdate := CriarBtn(btnTopUpdate, '🚀 Atualização!', sbkWarning, 12, 11, 17);
   skTopUpdate.Visible := False;
 
-  btnConfigVoltar.SetBounds(450, 470, 180, 40);
-  skConfigVoltar := CriarBtn(btnConfigVoltar, '← Voltar ao Sistema', sbkPrimary, 10, 10.5, 15);
-
   // Log do Dashboard
   btnClearLog.Anchors := [akTop, akRight];
   btnSaveLog.Anchors := [akTop, akRight];
   btnClearLog.SetBounds(pnlLogHeader.ClientWidth - 305, 5, 140, 35);
   btnSaveLog.SetBounds(pnlLogHeader.ClientWidth - 155, 5, 145, 35);
-  skClearLog := CriarBtn(btnClearLog, '🧹 Limpar Log', sbkDark, 8, 10.5, 15);
-  skSaveLog := CriarBtn(btnSaveLog, '💾 Salvar Log', sbkSuccess, 8, 10.5, 15);
+  skClearLog := CriarBtn(btnClearLog, '🧹 Limpar Log', sbkDark, 8, 11, 15);
+  skSaveLog := CriarBtn(btnSaveLog, '💾 Salvar Log', sbkSuccess, 8, 11, 15);
   skClearLog.Anchors := [akTop, akRight];
   skSaveLog.Anchors := [akTop, akRight];
 
@@ -3470,16 +3470,16 @@ begin
   skAtualizarRelogios := CriarBtn(btnAtualizarRelogios, '🔄 Atualizar', sbkPrimary, 8, 11, 16);
 
   btnSalvarRelogio.SetBounds(0, 4, 130, 36);
-  btnExcluirRelogio.SetBounds(142, 4, 125, 36);
-  btnTestarEsteRelogio.SetBounds(279, 4, 140, 36);
-  btnSincHoraEste.SetBounds(0, 45, 185, 36);
-  btnColetarEste.SetBounds(195, 45, 195, 36);
+  btnExcluirRelogio.SetBounds(140, 4, 125, 36);
+  btnTestarEsteRelogio.SetBounds(275, 4, 140, 36);
+  btnSincHoraEste.SetBounds(0, 46, 185, 36);
+  btnColetarEste.SetBounds(195, 46, 220, 36);
 
-  skSalvarRelogio := CriarBtn(btnSalvarRelogio, '💾 Salvar', sbkSuccess, 8, 10.5, 16);
-  skExcluirRelogio := CriarBtn(btnExcluirRelogio, '🗑️ Excluir', sbkDanger, 8, 10.5, 16);
-  skTestarEsteRelogio := CriarBtn(btnTestarEsteRelogio, '⚡ Testar', sbkPrimary, 8, 10.5, 16);
-  skSincHoraEste := CriarBtn(btnSincHoraEste, '🕒 Sincronizar Hora', sbkTeal, 8, 10.5, 16);
-  skColetarEste := CriarBtn(btnColetarEste, '📥 Coletar Marcações', sbkSuccess, 8, 10.5, 16);
+  skSalvarRelogio := CriarBtn(btnSalvarRelogio, '💾 Salvar', sbkSuccess, 8, 11, 16);
+  skExcluirRelogio := CriarBtn(btnExcluirRelogio, '🗑️ Excluir', sbkDanger, 8, 11, 16);
+  skTestarEsteRelogio := CriarBtn(btnTestarEsteRelogio, '⚡ Testar', sbkPrimary, 8, 11, 16);
+  skSincHoraEste := CriarBtn(btnSincHoraEste, '🕒 Sincronizar Hora', sbkTeal, 8, 11, 16);
+  skColetarEste := CriarBtn(btnColetarEste, '📥 Coletar Marcações', sbkSuccess, 8, 11, 16);
 
   // Aba Colaboradores - Barra superior da grid
   btnAtualizarColab.SetBounds(225, 8, 110, 38);
@@ -3489,78 +3489,92 @@ begin
   btnEnviarColabRelogio.Visible := False;
   btnRemoverColabRelogio.Visible := False;
 
-  skAtualizarColab := CriarBtn(btnAtualizarColab, '🔄 Atualizar', sbkPrimary, 8, 10.5, 16);
-  skEnviarTodosPendentes := CriarBtn(btnEnviarTodosPendentes, '🚀 Enviar Pendentes', sbkWarning, 8, 10.5, 16);
-  skImportarDoRelogio := CriarBtn(btnImportarDoRelogio, '📥 No Relógio', sbkPurple, 8, 10.5, 16);
-  skLimparTodosRelogio := CriarBtn(btnLimparTodosRelogio, '⚠️ Limpar Relógio', sbkDanger, 8, 10.5, 16);
+  skAtualizarColab := CriarBtn(btnAtualizarColab, '🔄 Atualizar', sbkPrimary, 8, 11, 16);
+  skEnviarTodosPendentes := CriarBtn(btnEnviarTodosPendentes, '🚀 Enviar Pendentes', sbkWarning, 8, 11, 16);
+  skImportarDoRelogio := CriarBtn(btnImportarDoRelogio, '📥 No Relógio', sbkPurple, 8, 11, 16);
+  skLimparTodosRelogio := CriarBtn(btnLimparTodosRelogio, '⚠️ Limpar Relógio', sbkDanger, 8, 11, 16);
 
   // Aba Colaboradores - Formulário de Edição e Ações
   btnSalvarColab.SetBounds(0, 4, 95, 36);
   btnSalvarEnviarColab.SetBounds(105, 4, 215, 36);
   btnNovoColab.SetBounds(330, 4, 95, 36);
-  btnRemoverColabForm.SetBounds(0, 46, 210, 36);
-  btnExcluirColabBanco.SetBounds(220, 46, 205, 36);
+  btnRemoverColabForm.SetBounds(0, 46, 205, 36);
+  btnExcluirColabBanco.SetBounds(215, 46, 210, 36);
 
-  skSalvarColab := CriarBtn(btnSalvarColab, '💾 Salvar', sbkPrimary, 8, 10.5, 16);
-  skSalvarEnviarColab := CriarBtn(btnSalvarEnviarColab, '📤 Salvar e Enviar ao Ponto', sbkSuccess, 8, 10.5, 16);
-  skNovoColab := CriarBtn(btnNovoColab, '➕ Novo', sbkDark, 8, 10.5, 16);
-  skRemoverColabForm := CriarBtn(btnRemoverColabForm, '❌ Remover do Relógio', sbkDanger, 8, 10.5, 16);
-  skExcluirColabBanco := CriarBtn(btnExcluirColabBanco, '🗑️ Excluir do Banco', sbkDanger, 8, 10.5, 16);
+  skSalvarColab := CriarBtn(btnSalvarColab, '💾 Salvar', sbkPrimary, 8, 11, 16);
+  skSalvarEnviarColab := CriarBtn(btnSalvarEnviarColab, '📤 Salvar e Enviar ao Ponto', sbkSuccess, 8, 11, 16);
+  skNovoColab := CriarBtn(btnNovoColab, '➕ Novo', sbkDark, 8, 11, 16);
+  skRemoverColabForm := CriarBtn(btnRemoverColabForm, '❌ Remover do Relógio', sbkDanger, 8, 11, 16);
+  skExcluirColabBanco := CriarBtn(btnExcluirColabBanco, '🗑️ Excluir do Banco', sbkDanger, 8, 11, 16);
 
   // Aba Marcações
-  btnFiltrarMarcacoes.SetBounds(495, 18, 115, 40);
-  btnEditarMarcacao.SetBounds(618, 18, 145, 40);
-  btnNovaMarcacao.SetBounds(770, 18, 140, 40);
-  btnExportarAFD.SetBounds(918, 18, 155, 40);
-  btnExcluirMarcacao.SetBounds(1080, 18, 135, 40);
+  btnFiltrarMarcacoes.SetBounds(490, 16, 110, 38);
+  btnEditarMarcacao.SetBounds(610, 16, 140, 38);
+  btnNovaMarcacao.SetBounds(760, 16, 135, 38);
+  btnExportarAFD.SetBounds(905, 16, 150, 38);
+  btnExcluirMarcacao.SetBounds(1065, 16, 130, 38);
   lblTotalMarcacoesGrid.Anchors := [akTop, akRight];
   lblTotalMarcacoesGrid.Left := pnlMarcacoesFiltro.ClientWidth - 170;
-  lblTotalMarcacoesGrid.Top := 30;
-  skFiltrarMarcacoes := CriarBtn(btnFiltrarMarcacoes, '🔍 Filtrar', sbkPrimary, 8, 10.5, 15);
-  skEditarMarcacao := CriarBtn(btnEditarMarcacao, '✏️ Corrigir Batida', sbkWarning, 8, 10.5, 15);
-  skNovaMarcacao := CriarBtn(btnNovaMarcacao, '➕ Incluir Batida', sbkSuccess, 8, 10.5, 15);
-  skExportarAFD := CriarBtn(btnExportarAFD, '📄 Exportar Registros', sbkPurple, 8, 10.5, 15);
-  skExcluirMarcacao := CriarBtn(btnExcluirMarcacao, '🗑️ Excluir Batida', sbkDanger, 8, 10.5, 15);
+  lblTotalMarcacoesGrid.Top := 26;
+  skFiltrarMarcacoes := CriarBtn(btnFiltrarMarcacoes, '🔍 Filtrar', sbkPrimary, 8, 11, 16);
+  skEditarMarcacao := CriarBtn(btnEditarMarcacao, '✏️ Corrigir Batida', sbkWarning, 8, 11, 16);
+  skNovaMarcacao := CriarBtn(btnNovaMarcacao, '➕ Incluir Batida', sbkSuccess, 8, 11, 16);
+  skExportarAFD := CriarBtn(btnExportarAFD, '📄 Exportar AFD', sbkPurple, 8, 11, 16);
+  skExcluirMarcacao := CriarBtn(btnExcluirMarcacao, '🗑️ Excluir Batida', sbkDanger, 8, 11, 16);
 
-  // Aba Configurações & Empregador
-  btnSalvarConfig.SetBounds(30, 465, 225, 44);
-  btnTestarConexaoFB.SetBounds(265, 465, 215, 44);
+  // Aba Configurações (Geral e Conexão) - 4 botões perfeitamente alinhados e espaçados
+  btnSalvarConfig.SetBounds(30, 465, 210, 44);
+  btnTestarConexaoFB.SetBounds(255, 465, 185, 44);
+  btnIrParaVersoes.SetBounds(455, 465, 230, 44);
+  btnConfigVoltar.SetBounds(700, 465, 185, 44);
+
   skSalvarConfig := CriarBtn(btnSalvarConfig, '💾 Salvar Configurações', sbkSuccess, 10, 11, 17);
   skTestarConexaoFB := CriarBtn(btnTestarConexaoFB, '🔌 Testar Firebird', sbkPrimary, 10, 11, 17);
+  skIrParaVersoes := CriarBtn(btnIrParaVersoes, '📋 Controle de Versão (Log)', sbkDark, 10, 11, 17);
+  skConfigVoltar := CriarBtn(btnConfigVoltar, '⬅️ Voltar ao Sistema', sbkPurple, 10, 11, 17);
 
-  btnCarregarEmpBanco.SetBounds(20, 295, 215, 38);
-  btnSalvarEmpBanco.SetBounds(255, 295, 215, 38);
+  // Dados do Empregador
+  btnCarregarEmpBanco.SetBounds(20, 295, 215, 40);
+  btnSalvarEmpBanco.SetBounds(255, 295, 215, 40);
   btnEnviarEmpRelogio.SetBounds(20, 345, 215, 40);
   btnLerEmpRelogio.SetBounds(255, 345, 215, 40);
-  skCarregarEmpBanco := CriarBtn(btnCarregarEmpBanco, '📥 Carregar do Banco', sbkPrimary, 8, 10.5, 16);
-  skSalvarEmpBanco := CriarBtn(btnSalvarEmpBanco, '💾 Salvar no Banco', sbkSuccess, 8, 10.5, 16);
-  skEnviarEmpRelogio := CriarBtn(btnEnviarEmpRelogio, '🏢 Enviar ao Relógio', sbkWarning, 8, 10.5, 16);
-  skLerEmpRelogio := CriarBtn(btnLerEmpRelogio, '📖 Ler do Relógio', sbkPurple, 8, 10.5, 16);
+  skCarregarEmpBanco := CriarBtn(btnCarregarEmpBanco, '📥 Carregar do Banco', sbkPrimary, 8, 11, 16);
+  skSalvarEmpBanco := CriarBtn(btnSalvarEmpBanco, '💾 Salvar no Banco', sbkSuccess, 8, 11, 16);
+  skEnviarEmpRelogio := CriarBtn(btnEnviarEmpRelogio, '🏢 Enviar ao Relógio', sbkWarning, 8, 11, 16);
+  skLerEmpRelogio := CriarBtn(btnLerEmpRelogio, '📖 Ler do Relógio', sbkPurple, 8, 11, 16);
+
+  // Aba Controle de Versão (Rodapé)
+  btnVersaoAtualizar.SetBounds(16, 8, 165, 38);
+  btnVersaoSair.SetBounds(pnlVersaoFooter.ClientWidth - 145, 8, 125, 38);
+  btnVersaoSair.Anchors := [akTop, akRight];
+  skVersaoAtualizar := CriarBtn(btnVersaoAtualizar, '🔄 Atualizar [F4]', sbkPrimary, 8, 11, 16);
+  skVersaoSair := CriarBtn(btnVersaoSair, '🚪 Sair [ESC]', sbkDark, 8, 11, 16);
+  skVersaoSair.Anchors := [akTop, akRight];
 
   // Aba Horários & Jornadas
   btnNovoHorario.SetBounds(12, 6, 145, 34);
   btnAtualizarHorarios.SetBounds(165, 6, 120, 34);
-  skNovoHorario := CriarBtn(btnNovoHorario, '➕ Novo Horário', sbkSuccess, 8, 10.5, 15);
-  skAtualizarHorarios := CriarBtn(btnAtualizarHorarios, '🔄 Atualizar', sbkPrimary, 8, 10.5, 15);
+  skNovoHorario := CriarBtn(btnNovoHorario, '➕ Novo Horário', sbkSuccess, 8, 11, 15);
+  skAtualizarHorarios := CriarBtn(btnAtualizarHorarios, '🔄 Atualizar', sbkPrimary, 8, 11, 15);
 
   btnSalvarHorario.SetBounds(0, 4, 110, 36);
   btnSalvarEnviarHorario.SetBounds(118, 4, 205, 36);
   btnNovoHorarioForm.SetBounds(330, 4, 100, 36);
   btnExcluirHorario.SetBounds(0, 45, 140, 36);
-  skSalvarHorario := CriarBtn(btnSalvarHorario, '💾 Salvar', sbkPrimary, 8, 10.5, 15);
-  skSalvarEnviarHorario := CriarBtn(btnSalvarEnviarHorario, '📤 Salvar e Atualizar Ponto', sbkSuccess, 8, 10.5, 15);
-  skNovoHorarioForm := CriarBtn(btnNovoHorarioForm, '✨ Novo', sbkDark, 8, 10.5, 15);
-  skExcluirHorario := CriarBtn(btnExcluirHorario, '🗑️ Excluir', sbkDanger, 8, 10.5, 15);
+  skSalvarHorario := CriarBtn(btnSalvarHorario, '💾 Salvar', sbkPrimary, 8, 11, 15);
+  skSalvarEnviarHorario := CriarBtn(btnSalvarEnviarHorario, '📤 Salvar e Atualizar Ponto', sbkSuccess, 8, 11, 15);
+  skNovoHorarioForm := CriarBtn(btnNovoHorarioForm, '✨ Novo', sbkDark, 8, 11, 15);
+  skExcluirHorario := CriarBtn(btnExcluirHorario, '🗑️ Excluir', sbkDanger, 8, 11, 15);
 
   // Aba Espelho de Ponto
-  btnCalcularEspelho.SetBounds(518, 18, 145, 36);
-  btnLancarJustificativa.SetBounds(672, 18, 180, 36);
-  btnExportarEspelhoHTML.SetBounds(860, 18, 200, 36);
-  btnCorrigirBatidaEspelho.SetBounds(1070, 18, 210, 36);
-  skCalcularEspelho := CriarBtn(btnCalcularEspelho, '⚙️ Apurar Ponto', sbkPrimary, 8, 10.5, 16);
-  skLancarJustificativa := CriarBtn(btnLancarJustificativa, '📝 Lançar Ocorrência', sbkPurple, 8, 10.5, 16);
-  skExportarEspelhoHTML := CriarBtn(btnExportarEspelhoHTML, '🖨️ Visualizar / Imprimir', sbkSuccess, 8, 10.5, 16);
-  skCorrigirBatidaEspelho := CriarBtn(btnCorrigirBatidaEspelho, '✏️ Corrigir / Incluir Batida', sbkWarning, 8, 10.5, 16);
+  btnCalcularEspelho.SetBounds(515, 16, 140, 38);
+  btnLancarJustificativa.SetBounds(665, 16, 175, 38);
+  btnExportarEspelhoHTML.SetBounds(850, 16, 190, 38);
+  btnCorrigirBatidaEspelho.SetBounds(1050, 16, 205, 38);
+  skCalcularEspelho := CriarBtn(btnCalcularEspelho, '⚙️ Apurar Ponto', sbkPrimary, 8, 11, 16);
+  skLancarJustificativa := CriarBtn(btnLancarJustificativa, '📝 Lançar Ocorrência', sbkPurple, 8, 11, 16);
+  skExportarEspelhoHTML := CriarBtn(btnExportarEspelhoHTML, '🖨️ Imprimir / Relatório', sbkSuccess, 8, 11, 16);
+  skCorrigirBatidaEspelho := CriarBtn(btnCorrigirBatidaEspelho, '✏️ Corrigir / Incluir', sbkWarning, 8, 11, 16);
 end;
 
 procedure TfrmMain.ArredondarControles;

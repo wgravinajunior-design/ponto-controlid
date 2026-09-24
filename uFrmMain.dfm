@@ -1443,26 +1443,11 @@ object frmMain: TfrmMain
         object tabCfgParametros: TTabSheet
           Caption = '  Geral e Conex'#227'o  '
           ImageIndex = 0
-          object btnConfigVoltar: TButton
-            Left = 450
-            Top = 470
-            Width = 180
-            Height = 40
-            Caption = 'Voltar ao Sistema'
-            Font.Charset = DEFAULT_CHARSET
-            Font.Color = clWindowText
-            Font.Height = -12
-            Font.Name = 'Segoe UI'
-            Font.Style = [fsBold]
-            ParentFont = False
-            TabOrder = 5
-            OnClick = btnConfigVoltarClick
-          end
           object btnIrParaVersoes: TButton
-            Left = 650
-            Top = 470
-            Width = 240
-            Height = 40
+            Left = 455
+            Top = 465
+            Width = 230
+            Height = 44
             Caption = 'Ver Controle de Vers'#227'o (Log)'
             Font.Charset = DEFAULT_CHARSET
             Font.Color = clWindowText
@@ -1470,8 +1455,23 @@ object frmMain: TfrmMain
             Font.Name = 'Segoe UI'
             Font.Style = [fsBold]
             ParentFont = False
-            TabOrder = 6
+            TabOrder = 5
             OnClick = btnIrParaVersoesClick
+          end
+          object btnConfigVoltar: TButton
+            Left = 700
+            Top = 465
+            Width = 185
+            Height = 44
+            Caption = 'Voltar ao Sistema'
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 6
+            OnClick = btnConfigVoltarClick
           end
       object grpBanco: TGroupBox
         Left = 30
@@ -1701,9 +1701,9 @@ object frmMain: TfrmMain
       end
       object btnSalvarConfig: TButton
         Left = 30
-        Top = 470
-        Width = 195
-        Height = 40
+        Top = 465
+        Width = 210
+        Height = 44
         Caption = 'Salvar Configura'#231#245'es'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWindowText
@@ -1715,10 +1715,10 @@ object frmMain: TfrmMain
         OnClick = btnSalvarConfigClick
       end
       object btnTestarConexaoFB: TButton
-        Left = 240
-        Top = 470
-        Width = 195
-        Height = 40
+        Left = 255
+        Top = 465
+        Width = 185
+        Height = 44
         Caption = 'Testar Conex'#227'o'
         Font.Charset = DEFAULT_CHARSET
         Font.Color = clWindowText

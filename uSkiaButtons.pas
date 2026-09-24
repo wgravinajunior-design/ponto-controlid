@@ -201,195 +201,195 @@ var
   LBgColorTop, LBgColorBottom, LBorderColor, LTextColor, LShadowColor: TAlphaColor;
   R, ShadowR, HighlightR: TRectF;
   LEmoji, LText: string;
-  LEmojiBuilder, LTextBuilder: ISkParagraphBuilder;
-  LEmojiPara, LTextPara: ISkParagraph;
-  LEmojiStyle, LTextStyle: ISkTextStyle;
-  LEmojiParaStyle, LTextParaStyle: ISkParagraphStyle;
+  LEmojiBuilder, LTextBuilder, LTextShadowBuilder: ISkParagraphBuilder;
+  LEmojiPara, LTextPara, LTextShadowPara: ISkParagraph;
+  LEmojiStyle, LTextStyle, LTextShadowStyle: ISkTextStyle;
+  LEmojiParaStyle, LTextParaStyle, LTextShadowParaStyle: ISkParagraphStyle;
   LEmojiW, LEmojiH, LTextW, LTextH, TotalW, Gap, StartX, EmojiX, EmojiY, TextX, TextY: Single;
   LFontFamilies: TArray<string>;
 begin
   inherited;
 
-  // Paleta de cores moderna, super vibrante e com alto contraste
+  // Paleta de cores moderna, super vibrante, saturada e com alto contraste
   case FKind of
-    sbkPrimary: // Azul Elétrico / Royal
+    sbkPrimary: // Azul Real Elétrico / Royal Blue Vibrante
     begin
       if FIsPressed then
       begin
-        LBgColorTop := $FF1D4ED8;
-        LBgColorBottom := $FF1E40AF;
-        LBorderColor := $FF3B82F6;
+        LBgColorTop := $FF0F3CB8;
+        LBgColorBottom := $FF0A2A82;
+        LBorderColor := $FF1652F0;
         LShadowColor := TAlphaColors.Null;
       end
       else if FIsHovered then
       begin
-        LBgColorTop := $FF60A5FA;
-        LBgColorBottom := $FF2563EB;
+        LBgColorTop := $FF2E6BF8;
+        LBgColorBottom := $FF1652F0;
         LBorderColor := $FFFFFFFF;
-        LShadowColor := $602563EB;
+        LShadowColor := $701652F0;
       end
       else
       begin
-        LBgColorTop := $FF3B82F6;
-        LBgColorBottom := $FF1D4ED8;
-        LBorderColor := $FFA4CAFE;
-        LShadowColor := $451D4ED8;
+        LBgColorTop := $FF1652F0;
+        LBgColorBottom := $FF0F3CB8;
+        LBorderColor := $FF4D82FF;
+        LShadowColor := $500E3498;
       end;
       LTextColor := TAlphaColors.White;
     end;
 
-    sbkTeal: // Turquesa / Ciano Oceânico
+    sbkTeal: // Turquesa / Ciano Oceânico Vibrante
     begin
       if FIsPressed then
       begin
-        LBgColorTop := $FF0D9488;
-        LBgColorBottom := $FF0F766E;
-        LBorderColor := $FF14B8A6;
+        LBgColorTop := $FF0E7490;
+        LBgColorBottom := $FF155E75;
+        LBorderColor := $FF0891B2;
         LShadowColor := TAlphaColors.Null;
       end
       else if FIsHovered then
-      begin
-        LBgColorTop := $FF22D3EE;
-        LBgColorBottom := $FF06B6D4;
-        LBorderColor := $FFFFFFFF;
-        LShadowColor := $6006B6D4;
-      end
-      else
       begin
         LBgColorTop := $FF06B6D4;
-        LBgColorBottom := $FF0D9488;
-        LBorderColor := $FF67E8F9;
-        LShadowColor := $450E7490;
+        LBgColorBottom := $FF0891B2;
+        LBorderColor := $FFFFFFFF;
+        LShadowColor := $700891B2;
+      end
+      else
+      begin
+        LBgColorTop := $FF0891B2;
+        LBgColorBottom := $FF0E7490;
+        LBorderColor := $FF22D3EE;
+        LShadowColor := $500E5C72;
       end;
       LTextColor := TAlphaColors.White;
     end;
 
-    sbkSuccess: // Verde Esmeralda Elétrico
+    sbkSuccess: // Verde Esmeralda / Jade Vibrante
     begin
       if FIsPressed then
       begin
-        LBgColorTop := $FF059669;
-        LBgColorBottom := $FF047857;
-        LBorderColor := $FF10B981;
+        LBgColorTop := $FF0A7B35;
+        LBgColorBottom := $FF065424;
+        LBorderColor := $FF10A348;
         LShadowColor := TAlphaColors.Null;
       end
       else if FIsHovered then
       begin
-        LBgColorTop := $FF34D399;
-        LBgColorBottom := $FF10B981;
+        LBgColorTop := $FF16BA54;
+        LBgColorBottom := $FF10A348;
         LBorderColor := $FFFFFFFF;
-        LShadowColor := $60059669;
+        LShadowColor := $7010A348;
       end
       else
       begin
-        LBgColorTop := $FF10B981;
-        LBgColorBottom := $FF059669;
-        LBorderColor := $FF6EE7B7;
-        LShadowColor := $45047857;
+        LBgColorTop := $FF10A348;
+        LBgColorBottom := $FF0A7B35;
+        LBorderColor := $FF34D399;
+        LShadowColor := $500A682D;
       end;
       LTextColor := TAlphaColors.White;
     end;
 
-    sbkDanger: // Vermelho Coral / Ruby Vibrante
+    sbkDanger: // Vermelho Rubi / Carmim Vibrante
     begin
       if FIsPressed then
       begin
-        LBgColorTop := $FFE11D48;
-        LBgColorBottom := $FFBE123C;
+        LBgColorTop := $FFB00F2E;
+        LBgColorBottom := $FF800B22;
+        LBorderColor := $FFE01A3F;
+        LShadowColor := TAlphaColors.Null;
+      end
+      else if FIsHovered then
+      begin
+        LBgColorTop := $FFF42E52;
+        LBgColorBottom := $FFE01A3F;
+        LBorderColor := $FFFFFFFF;
+        LShadowColor := $70E01A3F;
+      end
+      else
+      begin
+        LBgColorTop := $FFE01A3F;
+        LBgColorBottom := $FFB00F2E;
         LBorderColor := $FFF43F5E;
-        LShadowColor := TAlphaColors.Null;
-      end
-      else if FIsHovered then
-      begin
-        LBgColorTop := $FFFB7185;
-        LBgColorBottom := $FFF43F5E;
-        LBorderColor := $FFFFFFFF;
-        LShadowColor := $60E11D48;
-      end
-      else
-      begin
-        LBgColorTop := $FFF43F5E;
-        LBgColorBottom := $FFE11D48;
-        LBorderColor := $FFFCA5A5;
-        LShadowColor := $45BE123C;
+        LShadowColor := $50900C25;
       end;
       LTextColor := TAlphaColors.White;
     end;
 
-    sbkWarning: // Âmbar Dourado / Solar
+    sbkWarning: // Laranja Solar Intenso / Flame Orange (alto contraste)
     begin
       if FIsPressed then
       begin
-        LBgColorTop := $FFD97706;
-        LBgColorBottom := $FFB45309;
-        LBorderColor := $FFF59E0B;
+        LBgColorTop := $FFC2410C;
+        LBgColorBottom := $FF9A3412;
+        LBorderColor := $FFE8590C;
         LShadowColor := TAlphaColors.Null;
       end
       else if FIsHovered then
       begin
-        LBgColorTop := $FFFBBF24;
-        LBgColorBottom := $FFF59E0B;
+        LBgColorTop := $FFF97316;
+        LBgColorBottom := $FFE8590C;
         LBorderColor := $FFFFFFFF;
-        LShadowColor := $60D97706;
+        LShadowColor := $70E8590C;
       end
       else
       begin
-        LBgColorTop := $FFF59E0B;
-        LBgColorBottom := $FFD97706;
-        LBorderColor := $FFFDE047;
-        LShadowColor := $45B45309;
+        LBgColorTop := $FFE8590C;
+        LBgColorBottom := $FFC2410C;
+        LBorderColor := $FFFB923C;
+        LShadowColor := $509A3412;
       end;
       LTextColor := TAlphaColors.White;
     end;
 
-    sbkPurple: // Violeta / Roxo Nobre
+    sbkPurple: // Violeta Real / Roxo Vibrante
     begin
       if FIsPressed then
       begin
-        LBgColorTop := $FF7C3AED;
-        LBgColorBottom := $FF6D28D9;
-        LBorderColor := $FF8B5CF6;
+        LBgColorTop := $FF581C87;
+        LBgColorBottom := $FF3B0764;
+        LBorderColor := $FF7E22CE;
         LShadowColor := TAlphaColors.Null;
       end
       else if FIsHovered then
       begin
-        LBgColorTop := $FFA78BFA;
-        LBgColorBottom := $FF7C3AED;
+        LBgColorTop := $FF9333EA;
+        LBgColorBottom := $FF7E22CE;
         LBorderColor := $FFFFFFFF;
-        LShadowColor := $607C3AED;
+        LShadowColor := $707E22CE;
       end
       else
       begin
-        LBgColorTop := $FF8B5CF6;
-        LBgColorBottom := $FF6D28D9;
-        LBorderColor := $FFC4B5FD;
-        LShadowColor := $455B21B6;
+        LBgColorTop := $FF7E22CE;
+        LBgColorBottom := $FF581C87;
+        LBorderColor := $FFA855F7;
+        LShadowColor := $504A1572;
       end;
       LTextColor := TAlphaColors.White;
     end;
 
-    sbkDark: // Grafite / Slate Claro e Nítido
+    sbkDark: // Grafite / Slate Nobre
     begin
       if FIsPressed then
       begin
-        LBgColorTop := $FF334155;
-        LBgColorBottom := $FF1E293B;
-        LBorderColor := $FF475569;
+        LBgColorTop := $FF1E293B;
+        LBgColorBottom := $FF0F172A;
+        LBorderColor := $FF334155;
         LShadowColor := TAlphaColors.Null;
       end
       else if FIsHovered then
-      begin
-        LBgColorTop := $FF64748B;
-        LBgColorBottom := $FF475569;
-        LBorderColor := $FFFFFFFF;
-        LShadowColor := $601E293B;
-      end
-      else
       begin
         LBgColorTop := $FF475569;
         LBgColorBottom := $FF334155;
-        LBorderColor := $FFCBD5E1;
-        LShadowColor := $400F172A;
+        LBorderColor := $FFFFFFFF;
+        LShadowColor := $701E293B;
+      end
+      else
+      begin
+        LBgColorTop := $FF334155;
+        LBgColorBottom := $FF1E293B;
+        LBorderColor := $FF64748B;
+        LShadowColor := $500F172A;
       end;
       LTextColor := TAlphaColors.White;
     end;
@@ -402,22 +402,24 @@ begin
         LBgColorBottom := $FFCBD5E1;
         LBorderColor := $FF64748B;
         LShadowColor := TAlphaColors.Null;
+        LTextColor := $FF0F172A;
       end
       else if FIsHovered then
       begin
         LBgColorTop := $FFFFFFFF;
         LBgColorBottom := $FFE2E8F0;
-        LBorderColor := $FF94A3B8;
-        LShadowColor := $25000000;
+        LBorderColor := $FF3B82F6;
+        LShadowColor := $30000000;
+        LTextColor := $FF1652F0;
       end
       else
       begin
         LBgColorTop := $FFFFFFFF;
         LBgColorBottom := $FFF1F5F9;
         LBorderColor := $FFCBD5E1;
-        LShadowColor := $15000000;
+        LShadowColor := $20000000;
+        LTextColor := $FF0F172A;
       end;
-      LTextColor := $FF0F172A;
     end;
   end;
 
@@ -440,7 +442,8 @@ begin
     ACanvas.DrawRoundRect(ShadowR, FRadius, FRadius, LPaint);
   end;
 
-  // 2. Fundo com Gradiente Linear Vertical Vibrante
+  // 2. Fundo com Gradiente Linear Vertical Vibrante e 100% Sólido
+  LPaint.Color := TAlphaColors.White; // Garante opacidade total (255) sem transparência indesejada
   LPaint.Shader := TSkShader.MakeGradientLinear(
     PointF(R.Left, R.Top),
     PointF(R.Left, R.Bottom),
@@ -451,12 +454,12 @@ begin
   ACanvas.DrawRoundRect(R, FRadius, FRadius, LPaint);
   LPaint.Shader := nil;
 
-  // 3. Brilho no topo interior (Efeito de acabamento e profundidade)
+  // 3. Brilho sutil no topo interior (acabamento e profundidade sem esbranquiçar)
   if (not FIsPressed) and (FKind <> sbkDefault) then
   begin
     HighlightR := R;
     HighlightR.Inflate(-1, -1);
-    LPaint.Color := $30FFFFFF;
+    LPaint.Color := $18FFFFFF;
     LPaint.Style := TSkPaintStyle.Stroke;
     LPaint.StrokeWidth := 1.0;
     ACanvas.DrawRoundRect(HighlightR, FRadius - 1, FRadius - 1, LPaint);
@@ -470,11 +473,11 @@ begin
     if FIsHovered then
       LPaint.StrokeWidth := 2.0
     else
-      LPaint.StrokeWidth := 1.3;
+      LPaint.StrokeWidth := 1.5;
     ACanvas.DrawRoundRect(R, FRadius, FRadius, LPaint);
   end;
 
-  // 5. Renderização do Emoji e Texto em Alta Resolução (Independentes e Alinhados)
+  // 5. Renderização do Emoji e Texto em Alta Resolução (com sombra de texto para máxima nitidez)
   if (FCaption <> '') or (FEmoji <> '') then
   begin
     if FEmoji <> '' then
@@ -489,6 +492,7 @@ begin
     LEmojiH := 0;
     LTextW := 0;
     LTextH := 0;
+    LTextShadowPara := nil;
 
     // Emoji em alta definição
     if LEmoji <> '' then
@@ -535,6 +539,23 @@ begin
       LTextPara.Layout(R.Width);
       LTextW := LTextPara.MaxIntrinsicWidth;
       LTextH := LTextPara.Height;
+
+      // Sombra suave do texto para contraste impecável em qualquer resolução
+      if (LTextColor = TAlphaColors.White) and (FKind <> sbkDefault) then
+      begin
+        LTextShadowParaStyle := TSkParagraphStyle.Create;
+        LTextShadowBuilder := TSkParagraphBuilder.Create(LTextShadowParaStyle);
+        LTextShadowStyle := TSkTextStyle.Create;
+        LTextShadowStyle.FontFamilies := LFontFamilies;
+        LTextShadowStyle.FontSize := FFontSize;
+        LTextShadowStyle.FontStyle := TSkFontStyle.Create(TSkFontWeight.Bold, TSkFontWidth.Normal, TSkFontSlant.Upright);
+        LTextShadowStyle.Color := $60000000;
+        LTextShadowBuilder.PushStyle(LTextShadowStyle);
+        LTextShadowBuilder.AddText(LText);
+        LTextShadowBuilder.Pop;
+        LTextShadowPara := LTextShadowBuilder.Build;
+        LTextShadowPara.Layout(R.Width);
+      end;
     end;
 
     Gap := 8.0;
@@ -553,6 +574,8 @@ begin
         TextY := TextY + 1;
       end;
       LEmojiPara.Paint(ACanvas, EmojiX, EmojiY);
+      if LTextShadowPara <> nil then
+        LTextShadowPara.Paint(ACanvas, TextX, TextY + 1.2);
       LTextPara.Paint(ACanvas, TextX, TextY);
     end
     else if LEmoji <> '' then
@@ -569,6 +592,8 @@ begin
       TextY := R.Top + (R.Height - LTextH) / 2;
       if FIsPressed then
         TextY := TextY + 1;
+      if LTextShadowPara <> nil then
+        LTextShadowPara.Paint(ACanvas, TextX, TextY + 1.2);
       LTextPara.Paint(ACanvas, TextX, TextY);
     end;
   end;
