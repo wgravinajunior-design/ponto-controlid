@@ -1,0 +1,22 @@
+# Delphi generated files
+*.dcu
+*.identcache
+*.local
+*.stat
+*.tvsconfig
+*.rsm
+*.map
+__history/
+__recovery/
+Win32/
+Win64/
+
+# Binaries & updater temp files
+*.exe
+PontoControlID_new.exe
+update_restart.bat
+
+# Scratch and debug files
+scratch/
+*.txt
+Config.ini
