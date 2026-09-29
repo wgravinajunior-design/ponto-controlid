@@ -1691,7 +1691,7 @@ begin
 
   // 7. Sincronizar Histórico e Scripts de cada Versão do Sistema
   SincronizarRegistroVersao(
-    FDConnection, 1, '1.0.0', 'actVersao100',
+    FDConnection, 1, '1.0.1', 'actVersao100',
     'Criação da Estrutura Inicial do Ponto Control iD (Tabelas de Relógios e Marcações)',
     '-- Criação da tabela de Relógios de Ponto'#13#10 +
     'CREATE TABLE TB_PONTO_RELOGIO ('#13#10 +
@@ -1775,7 +1775,7 @@ begin
   );
 
   SincronizarRegistroVersao(
-    FDConnection, 3, '1.0.2', 'actVersao102',
+    FDConnection, 3, '1.0.1', 'actVersao102',
     'Módulo de Horários, Jornadas de Trabalho, Tolerâncias e Justificativas de Ponto',
     '-- Parametrização de Horários e Jornadas de Trabalho'#13#10 +
     'CREATE TABLE TB_PONTO_HORARIO ('#13#10 +
@@ -1821,7 +1821,7 @@ begin
   );
 
   SincronizarRegistroVersao(
-    FDConnection, 4, '1.0.3', 'actVersao103',
+    FDConnection, 4, '1.0.1', 'actVersao103',
     'Auditoria de Ajuste Manual de Batidas, Layout Portaria 671 MTE e Sincronização',
     '-- Motivo de Ajuste Manual em Batidas de Ponto (Portaria 671)'#13#10 +
     'ALTER TABLE TB_PONTO_MARCACAO'#13#10 +
@@ -1836,7 +1836,7 @@ begin
   );
 
   SincronizarRegistroVersao(
-    FDConnection, 5, '1.0.5', 'actVersao105',
+    FDConnection, 5, '1.0.1', 'actVersao105',
     'Tela de Controle de Versão, Histórico de Scripts e Novos Campos Complementares',
     '-- Campos de Histórico e Auditoria de Versão'#13#10 +
     'ALTER TABLE TB_PONTO_VERSAO_BD ADD VER_ACAO VARCHAR(40);'#13#10 +

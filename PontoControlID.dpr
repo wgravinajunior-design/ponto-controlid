@@ -5,6 +5,7 @@ uses
   System.IOUtils,
   Vcl.Skia,
   Vcl.Forms,
+  uBuildInfo in 'uBuildInfo.pas',
   uConfig in 'uConfig.pas',
   uControlIDClient in 'uControlIDClient.pas',
   uDataModule in 'uDataModule.pas' {dmDados: TDataModule},

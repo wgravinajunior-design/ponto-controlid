@@ -1687,7 +1687,7 @@ object frmMain: TfrmMain
         object chkAutoIniciar: TCheckBox
           Left = 20
           Top = 90
-          Width = 350
+          Width = 300
           Height = 19
           Caption = 'Iniciar Coleta Autom'#225'tica ao abrir o integrador'
           Font.Charset = DEFAULT_CHARSET
@@ -1697,6 +1697,20 @@ object frmMain: TfrmMain
           Font.Style = []
           ParentFont = False
           TabOrder = 1
+        end
+        object chkAutoAtualizar: TCheckBox
+          Left = 330
+          Top = 90
+          Width = 260
+          Height = 19
+          Caption = 'Atualizar o sistema automaticamente (GitHub)'
+          Font.Charset = DEFAULT_CHARSET
+          Font.Color = clWindowText
+          Font.Height = -12
+          Font.Name = 'Segoe UI'
+          Font.Style = []
+          ParentFont = False
+          TabOrder = 2
         end
       end
       object btnSalvarConfig: TButton

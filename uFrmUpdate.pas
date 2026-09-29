@@ -4,21 +4,28 @@ interface
 
 uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
-  System.SysUtils, System.Variants, System.Classes, System.UITypes,
-  System.Generics.Collections,
+  System.SysUtils, System.Variants, System.Classes, System.UITypes, System.DateUtils,
+  System.Generics.Collections, System.RegularExpressions,
   System.JSON, System.Net.HttpClient, System.Net.HttpClientComponent,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls,
-  Vcl.StdCtrls, Vcl.ComCtrls,
+  Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg,
   uConfig, uSkiaButtons;
 
 type
   TfrmUpdate = class(TForm)
     pnlHeader: TPanel;
+    imgLogo: TImage;
     lblTitle: TLabel;
     lblSubTitle: TLabel;
     pnlContent: TPanel;
+    pnlCardAtual: TPanel;
+    lblAtualTitulo: TLabel;
     lblVersaoAtual: TLabel;
+    lblBuildAtual: TLabel;
+    pnlCardNova: TPanel;
+    lblNovaTitulo: TLabel;
     lblVersaoNova: TLabel;
+    lblBuildNova: TLabel;
     lblNotas: TLabel;
     memNotas: TMemo;
     pbDownload: TProgressBar;
@@ -27,26 +34,33 @@ type
     pnlBottom: TPanel;
     btnBaixar: TButton;
     btnCancelar: TButton;
+    tmrAuto: TTimer;
     procedure FormCreate(Sender: TObject);
     procedure FormDestroy(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure btnBaixarClick(Sender: TObject);
     procedure btnCancelarClick(Sender: TObject);
+    procedure tmrAutoTimer(Sender: TObject);
   private
     FUpdateInfo: TUpdateInfo;
     FSkBaixar: TSkModernButton;
     FSkCancelar: TSkModernButton;
     FDownloading: Boolean;
     FCancelRequested: Boolean;
+    FFecharAoCancelar: Boolean;
+    FSegundosAuto: Integer;
     procedure SetUpdateInfo(const Value: TUpdateInfo);
+    procedure IniciarContagemAutomatica;
     procedure IniciarDownload;
     procedure ConcluirAtualizacao(const ANovoExePath: string);
+    procedure SetCaptionCancelar(const ACaption: string);
     function CriarBtn(AOriginal: TButton; const ACaption: string; AKind: TSkButtonKind): TSkModernButton;
     procedure HttpReceiveData(const Sender: TObject; AContentLength: Int64; AReadCount: Int64; var AAbort: Boolean);
   public
     class function ChecarAtualizacao(out AInfo: TUpdateInfo): Boolean; static;
     class function CompararVersoes(const V1, V2: string): Integer; static;
-    class procedure ExecutarAtualizacao(AOwner: TComponent; const AInfo: TUpdateInfo); static;
+    class procedure ExecutarAtualizacao(AOwner: TComponent; const AInfo: TUpdateInfo;
+      AAutomatico: Boolean = False); static;
     property UpdateInfo: TUpdateInfo read FUpdateInfo write SetUpdateInfo;
   end;
 
@@ -56,6 +70,10 @@ var
 implementation
 
 {$R *.dfm}
+
+const
+  SEGUNDOS_ATUALIZACAO_AUTO = 15;
+  NOME_EXE_RELEASE = 'PontoControlID.exe';
 
 { Utilitários de Versão e Rede }
 
@@ -67,6 +85,28 @@ begin
   if (Length(S) > 0) and ((S[1] = 'v') or (S[1] = 'V')) then
     S := Copy(S, 2, Length(S) - 1);
   Result := Trim(S);
+end;
+
+// Extrai o número de build do título/notas da release (ex.: "v1.0.1 (Build 7)")
+function ExtrairBuild(const ATexto: string): Integer;
+var
+  M: TMatch;
+begin
+  Result := 0;
+  M := TRegEx.Match(ATexto, 'build\s*[:#]?\s*(\d+)', [roIgnoreCase]);
+  if M.Success then
+    Result := StrToIntDef(M.Groups[1].Value, 0);
+end;
+
+function FormatarDataRelease(const AIso: string): string;
+begin
+  Result := '';
+  if AIso = '' then Exit;
+  try
+    Result := FormatDateTime('dd/mm/yyyy hh:nn', ISO8601ToDate(AIso, False));
+  except
+    Result := '';
+  end;
 end;
 
 class function TfrmUpdate.CompararVersoes(const V1, V2: string): Integer;
@@ -112,17 +152,19 @@ var
   JSONVal, AssetObj: TJSONValue;
   RootObj: TJSONObject;
   AssetsArr: TJSONArray;
-  I: Integer;
+  I, CmpVersao: Integer;
   AssetSize: Int64;
 begin
   Result := False;
   AInfo.HasUpdate := False;
   AInfo.LatestVersion := '';
+  AInfo.LatestBuild := 0;
   AInfo.ReleaseName := '';
   AInfo.ReleaseNotes := '';
   AInfo.DownloadUrl := '';
   AInfo.AssetFileName := '';
   AInfo.AssetSize := 0;
+  AInfo.PublishedAt := '';
 
   URL := Format('https://api.github.com/repos/%s/%s/releases/latest', [GITHUB_OWNER, GITHUB_REPO]);
   Client := THTTPClient.Create;
@@ -148,8 +190,11 @@ begin
             AInfo.ReleaseName := RootObj.GetValue<string>('name', TagStr);
             AInfo.ReleaseNotes := RootObj.GetValue<string>('body', '');
             AInfo.PublishedAt := RootObj.GetValue<string>('published_at', '');
+            AInfo.LatestBuild := ExtrairBuild(AInfo.ReleaseName);
+            if AInfo.LatestBuild = 0 then
+              AInfo.LatestBuild := ExtrairBuild(AInfo.ReleaseNotes);
 
-            // Localizar executável nos assets
+            // Localizar executável nos assets (prioriza PontoControlID.exe)
             AssetsArr := RootObj.GetValue<TJSONArray>('assets');
             if Assigned(AssetsArr) then
             begin
@@ -162,22 +207,26 @@ begin
                   DownloadUrl := (AssetObj as TJSONObject).GetValue<string>('browser_download_url', '');
                   AssetSize := (AssetObj as TJSONObject).GetValue<Int64>('size', 0);
 
-                  if SameText(ExtractFileExt(AssetName), '.exe') or (AInfo.DownloadUrl = '') then
+                  if not SameText(ExtractFileExt(AssetName), '.exe') then
+                    Continue;
+
+                  if (AInfo.DownloadUrl = '') or SameText(AssetName, NOME_EXE_RELEASE) then
                   begin
                     AInfo.AssetFileName := AssetName;
                     AInfo.DownloadUrl := DownloadUrl;
                     AInfo.AssetSize := AssetSize;
-                    if SameText(ExtractFileExt(AssetName), '.exe') then
+                    if SameText(AssetName, NOME_EXE_RELEASE) then
                       Break;
                   end;
                 end;
               end;
             end;
 
-            // Se encontrou release válida e versão é superior
+            // Atualiza se a versão for maior, ou se for a mesma versão com build maior
             if (AInfo.LatestVersion <> '') and (AInfo.DownloadUrl <> '') then
             begin
-              if CompararVersoes(AInfo.LatestVersion, APP_VERSION) > 0 then
+              CmpVersao := CompararVersoes(AInfo.LatestVersion, APP_VERSION);
+              if (CmpVersao > 0) or ((CmpVersao = 0) and (AInfo.LatestBuild > APP_BUILD)) then
               begin
                 AInfo.HasUpdate := True;
                 Result := True;
@@ -196,13 +245,16 @@ begin
   end;
 end;
 
-class procedure TfrmUpdate.ExecutarAtualizacao(AOwner: TComponent; const AInfo: TUpdateInfo);
+class procedure TfrmUpdate.ExecutarAtualizacao(AOwner: TComponent; const AInfo: TUpdateInfo;
+  AAutomatico: Boolean);
 var
   Frm: TfrmUpdate;
 begin
   Frm := TfrmUpdate.Create(AOwner);
   try
     Frm.UpdateInfo := AInfo;
+    if AAutomatico then
+      Frm.IniciarContagemAutomatica;
     Frm.ShowModal;
   finally
     Frm.Free;
@@ -227,41 +279,78 @@ begin
 end;
 
 procedure TfrmUpdate.FormCreate(Sender: TObject);
+var
+  Dir: string;
 begin
   FDownloading := False;
   FCancelRequested := False;
   pbDownload.Position := 0;
+  Icon := Application.Icon;
 
-  // Botões Skia com visual moderno
+  // Mesmo logo do cabeçalho da tela principal
+  Dir := ExtractFilePath(Application.ExeName);
+  try
+    if FileExists(Dir + 'app_logo.png') then
+      imgLogo.Picture.LoadFromFile(Dir + 'app_logo.png')
+    else if FileExists(Dir + 'logo.jpg') then
+      imgLogo.Picture.LoadFromFile(Dir + 'logo.jpg');
+  except
+  end;
+
+  // Botões Skia no padrão visual do sistema
   FSkBaixar := CriarBtn(btnBaixar, '🚀 Baixar e Atualizar', sbkSuccess);
-  FSkCancelar := CriarBtn(btnCancelar, 'Fechar', sbkDark);
+  FSkCancelar := CriarBtn(btnCancelar, '🚪 Fechar', sbkDark);
+
+  lblVersaoAtual.Caption := 'v' + APP_VERSION;
+  if APP_BUILD_DATE <> '' then
+    lblBuildAtual.Caption := Format('Build %d  •  %s', [APP_BUILD, APP_BUILD_DATE])
+  else
+    lblBuildAtual.Caption := Format('Build %d', [APP_BUILD]);
 end;
 
 procedure TfrmUpdate.FormDestroy(Sender: TObject);
 begin
+  tmrAuto.Enabled := False;
   FCancelRequested := True;
 end;
 
 procedure TfrmUpdate.FormClose(Sender: TObject; var Action: TCloseAction);
 begin
+  tmrAuto.Enabled := False;
   if FDownloading then
   begin
     if MessageDlg('O download da atualização está em andamento. Deseja cancelar?',
                   mtConfirmation, [mbYes, mbNo], 0) = mrYes then
     begin
       FCancelRequested := True;
-      Action := caFree;
-    end
-    else
-      Action := caNone;
+      FFecharAoCancelar := True;
+    end;
+    // Aguarda a thread de download finalizar antes de fechar (ver IniciarDownload)
+    Action := caNone;
   end;
 end;
 
+procedure TfrmUpdate.SetCaptionCancelar(const ACaption: string);
+begin
+  btnCancelar.Caption := ACaption;
+  if Assigned(FSkCancelar) then
+    FSkCancelar.Caption := ACaption;
+end;
+
 procedure TfrmUpdate.SetUpdateInfo(const Value: TUpdateInfo);
+var
+  DataPub: string;
 begin
   FUpdateInfo := Value;
-  lblVersaoAtual.Caption := 'Versão Atual: v' + APP_VERSION;
-  lblVersaoNova.Caption := 'Nova Versão: v' + FUpdateInfo.LatestVersion;
+  lblVersaoNova.Caption := 'v' + FUpdateInfo.LatestVersion;
+
+  DataPub := FormatarDataRelease(FUpdateInfo.PublishedAt);
+  if FUpdateInfo.LatestBuild > 0 then
+    lblBuildNova.Caption := Format('Build %d', [FUpdateInfo.LatestBuild])
+  else
+    lblBuildNova.Caption := 'Build -';
+  if DataPub <> '' then
+    lblBuildNova.Caption := lblBuildNova.Caption + '  •  ' + DataPub;
 
   if Trim(FUpdateInfo.ReleaseNotes) <> '' then
     memNotas.Text := FUpdateInfo.ReleaseNotes
@@ -275,15 +364,44 @@ begin
     lblProgresso.Caption := 'Pronto para iniciar download da atualização.';
 end;
 
+procedure TfrmUpdate.IniciarContagemAutomatica;
+begin
+  FSegundosAuto := SEGUNDOS_ATUALIZACAO_AUTO;
+  lblSubTitle.Caption := 'Atualização automática programada';
+  lblProgresso.Caption := Format('⏳ Atualizando automaticamente em %ds...', [FSegundosAuto]);
+  lblPorcentagem.Caption := '';
+  SetCaptionCancelar('⏸️ Adiar');
+  tmrAuto.Interval := 1000;
+  tmrAuto.Enabled := True;
+end;
+
+procedure TfrmUpdate.tmrAutoTimer(Sender: TObject);
+begin
+  Dec(FSegundosAuto);
+  if FSegundosAuto <= 0 then
+  begin
+    tmrAuto.Enabled := False;
+    IniciarDownload;
+  end
+  else
+    lblProgresso.Caption := Format('⏳ Atualizando automaticamente em %ds...', [FSegundosAuto]);
+end;
+
 procedure TfrmUpdate.btnBaixarClick(Sender: TObject);
 begin
+  tmrAuto.Enabled := False;
   if FDownloading then Exit;
   IniciarDownload;
 end;
 
 procedure TfrmUpdate.btnCancelarClick(Sender: TObject);
 begin
-  if FDownloading then
+  if tmrAuto.Enabled then
+  begin
+    tmrAuto.Enabled := False;
+    Close;
+  end
+  else if FDownloading then
   begin
     FCancelRequested := True;
     lblProgresso.Caption := 'Cancelando download...';
@@ -320,18 +438,52 @@ begin
     end);
 end;
 
+// Confere se o arquivo baixado é um executável Windows íntegro
+function ValidarExecutavel(const APath: string; ATamanhoEsperado: Int64; out AErro: string): Boolean;
+var
+  FS: TFileStream;
+  Sig: array[0..1] of AnsiChar;
+begin
+  Result := False;
+  AErro := '';
+  if not FileExists(APath) then
+  begin
+    AErro := 'arquivo baixado não encontrado';
+    Exit;
+  end;
+  FS := TFileStream.Create(APath, fmOpenRead or fmShareDenyNone);
+  try
+    if (ATamanhoEsperado > 0) and (FS.Size <> ATamanhoEsperado) then
+    begin
+      AErro := Format('tamanho inválido (%s de %s)', [FormatarBytes(FS.Size), FormatarBytes(ATamanhoEsperado)]);
+      Exit;
+    end;
+    if (FS.Size < 2) or (FS.Read(Sig, 2) <> 2) or (Sig[0] <> 'M') or (Sig[1] <> 'Z') then
+    begin
+      AErro := 'o arquivo baixado não é um executável válido';
+      Exit;
+    end;
+  finally
+    FS.Free;
+  end;
+  Result := True;
+end;
+
 procedure TfrmUpdate.IniciarDownload;
 var
   TargetUrl, DestPath: string;
+  TamanhoEsperado: Int64;
 begin
   FDownloading := True;
   FCancelRequested := False;
   btnBaixar.Enabled := False;
   if Assigned(FSkBaixar) then FSkBaixar.Enabled := False;
-  btnCancelar.Caption := 'Cancelar';
-  if Assigned(FSkCancelar) then FSkCancelar.Caption := 'Cancelar';
+  SetCaptionCancelar('✖️ Cancelar');
+  lblProgresso.Caption := 'Conectando ao GitHub...';
+  lblPorcentagem.Caption := '0%';
 
   TargetUrl := FUpdateInfo.DownloadUrl;
+  TamanhoEsperado := FUpdateInfo.AssetSize;
   DestPath := ExtractFilePath(ParamStr(0)) + 'PontoControlID_new.exe';
 
   TThread.CreateAnonymousThread(
@@ -367,6 +519,9 @@ begin
           finally
             FileStream.Free;
           end;
+
+          if Success and not ValidarExecutavel(DestPath, TamanhoEsperado, ErrMessage) then
+            Success := False;
         except
           on E: Exception do
           begin
@@ -393,8 +548,7 @@ begin
           begin
             btnBaixar.Enabled := True;
             if Assigned(FSkBaixar) then FSkBaixar.Enabled := True;
-            btnCancelar.Caption := 'Fechar';
-            if Assigned(FSkCancelar) then FSkCancelar.Caption := 'Fechar';
+            SetCaptionCancelar('🚪 Fechar');
 
             if FCancelRequested then
               lblProgresso.Caption := 'Download cancelado pelo usuário.'
@@ -403,6 +557,9 @@ begin
 
             if FileExists(DestPath) then
               DeleteFile(DestPath);
+
+            if FFecharAoCancelar then
+              Close;
           end;
         end);
     end).Start;
@@ -410,32 +567,37 @@ end;
 
 procedure TfrmUpdate.ConcluirAtualizacao(const ANovoExePath: string);
 var
-  BatPath, AppExePath, BatContent: string;
+  BatPath, AppExePath, OldExePath, BatContent: string;
   BatFile: TStringList;
   AppPID: Cardinal;
 begin
   AppExePath := ParamStr(0);
+  OldExePath := ChangeFileExt(AppExePath, '') + '_old.exe';
   BatPath := ExtractFilePath(AppExePath) + 'update_restart.bat';
   AppPID := GetCurrentProcessId;
 
+  // Aguarda o processo encerrar, guarda o executável atual como backup (_old.exe),
+  // instala o novo e reinicia o sistema.
   BatContent :=
     '@echo off' + sLineBreak +
     'timeout /t 1 /nobreak > nul' + sLineBreak +
     ':loop' + sLineBreak +
     Format('taskkill /F /PID %d > nul 2>&1', [AppPID]) + sLineBreak +
-    Format('del "%s" > nul 2>&1', [AppExePath]) + sLineBreak +
+    Format('del "%s" > nul 2>&1', [OldExePath]) + sLineBreak +
+    Format('move /y "%s" "%s" > nul 2>&1', [AppExePath, OldExePath]) + sLineBreak +
     Format('if exist "%s" (', [AppExePath]) + sLineBreak +
     '    timeout /t 1 /nobreak > nul' + sLineBreak +
     '    goto loop' + sLineBreak +
     ')' + sLineBreak +
     Format('move /y "%s" "%s" > nul', [ANovoExePath, AppExePath]) + sLineBreak +
+    Format('if not exist "%s" move /y "%s" "%s" > nul', [AppExePath, OldExePath, AppExePath]) + sLineBreak +
     Format('start "" "%s"', [AppExePath]) + sLineBreak +
     'del "%~f0"' + sLineBreak;
 
   BatFile := TStringList.Create;
   try
     BatFile.Text := BatContent;
-    BatFile.SaveToFile(BatPath, TEncoding.ASCII);
+    BatFile.SaveToFile(BatPath, TEncoding.ANSI);
   finally
     BatFile.Free;
   end;

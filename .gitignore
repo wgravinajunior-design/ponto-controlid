@@ -20,3 +20,5 @@ update_restart.bat
 scratch/
 *.txt
 Config.ini
+PontoControlID_old.exe
+startup_error.log

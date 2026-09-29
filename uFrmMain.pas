@@ -196,6 +196,7 @@ type
     lblIntervalo: TLabel;
     edtIntervalo: TEdit;
     chkAutoIniciar: TCheckBox;
+    chkAutoAtualizar: TCheckBox;
     btnSalvarConfig: TButton;
     btnTestarConexaoFB: TButton;
     grpEmpregador: TGroupBox;
@@ -395,8 +396,15 @@ type
     FUltimoEspelho: TEspelhoPonto;
     FPreviousTab: TTabSheet;
     FLatestUpdateInfo: TUpdateInfo;
+    FTmrChecarAtualizacao: TTimer;
+    FChecandoAtualizacao: Boolean;
+    FTelaAtualizacaoAberta: Boolean;
+    FUltimaAtualizacaoOferecida: string;
 
     procedure ChecarAtualizacaoSistemaAsync;
+    procedure TmrChecarAtualizacaoTimer(Sender: TObject);
+    procedure AbrirTelaAtualizacao(AAutomatico: Boolean);
+    procedure ExibirVersaoBuild;
     procedure LogMessage(const AMsg: string; AIsError: Boolean = False);
     procedure CarregarConfigNaTela;
     procedure AtualizarDashboard;
@@ -594,8 +602,17 @@ begin
   WindowState := wsMaximized;
   ShowWindow(Handle, SW_MAXIMIZE);
   ArredondarControles;
-  lblHeaderVersion.Caption := 'v' + APP_VERSION;
-  lblFootVersion.Caption := '🏷️ v' + APP_VERSION;
+  ExibirVersaoBuild;
+
+  // Auto-update via GitHub: verifica ao abrir (mesmo sem banco) e periodicamente
+  if not Assigned(FTmrChecarAtualizacao) then
+  begin
+    FTmrChecarAtualizacao := TTimer.Create(Self);
+    FTmrChecarAtualizacao.Interval := AppConfig.Atualizacao.IntervaloVerificacaoMin * 60 * 1000;
+    FTmrChecarAtualizacao.OnTimer := TmrChecarAtualizacaoTimer;
+    FTmrChecarAtualizacao.Enabled := True;
+  end;
+  ChecarAtualizacaoSistemaAsync;
   AtualizarStatusColeta('🔄 Coleta: Desativada', False);
 
   if Icon.Handle <> 0 then
@@ -618,7 +635,6 @@ begin
     AtualizarDashboard;
     btnCarregarEmpBancoClick(nil);
     CarregarControleVersao;
-    ChecarAtualizacaoSistemaAsync;
 
     KeyPreview := True;
     OnKeyDown := FormKeyDown;
@@ -743,6 +759,7 @@ begin
 
   edtIntervalo.Text := IntToStr(AppConfig.ControlID.IntervaloColetaSegundos);
   chkAutoIniciar.Checked := AppConfig.ControlID.AutoIniciarColeta;
+  chkAutoAtualizar.Checked := AppConfig.Atualizacao.AutoAtualizar;
 end;
 
 procedure TfrmMain.AtualizarDashboard;
@@ -2346,35 +2363,96 @@ end;
 
 procedure TfrmMain.btnTopUpdateClick(Sender: TObject);
 begin
-  TfrmUpdate.ExecutarAtualizacao(Self, FLatestUpdateInfo);
+  AbrirTelaAtualizacao(False);
+end;
+
+procedure TfrmMain.ExibirVersaoBuild;
+begin
+  // Cabeçalho: título e, logo abaixo, a versão + build
+  lblTitle.Top := 14;
+  lblHeaderVersion.Left := lblTitle.Left + 2;
+  lblHeaderVersion.Top := lblTitle.Top + lblTitle.Height + 4;
+  lblHeaderVersion.Caption := VersaoCompleta;
+  if APP_BUILD_DATE <> '' then
+  begin
+    lblHeaderVersion.Hint := 'Compilado em ' + APP_BUILD_DATE;
+    lblHeaderVersion.ShowHint := True;
+  end;
+
+  // Rodapé: versão + build, reposicionando os itens seguintes
+  lblFootVersion.Caption := '🏷️ ' + VersaoCompleta;
+  lblFootVersion.Hint := lblHeaderVersion.Hint;
+  lblFootVersion.ShowHint := lblHeaderVersion.ShowHint;
+  lblFootSep1.Left := lblFootVersion.Left + lblFootVersion.Width + 10;
+  lblFootColeta.Left := lblFootSep1.Left + lblFootSep1.Width + 10;
+end;
+
+procedure TfrmMain.TmrChecarAtualizacaoTimer(Sender: TObject);
+begin
+  ChecarAtualizacaoSistemaAsync;
+end;
+
+procedure TfrmMain.AbrirTelaAtualizacao(AAutomatico: Boolean);
+begin
+  if FTelaAtualizacaoAberta or (not FLatestUpdateInfo.HasUpdate) then Exit;
+  FTelaAtualizacaoAberta := True;
+  try
+    FUltimaAtualizacaoOferecida := Format('%s.%d', [FLatestUpdateInfo.LatestVersion, FLatestUpdateInfo.LatestBuild]);
+    TfrmUpdate.ExecutarAtualizacao(Self, FLatestUpdateInfo, AAutomatico);
+  finally
+    FTelaAtualizacaoAberta := False;
+  end;
 end;
 
 procedure TfrmMain.ChecarAtualizacaoSistemaAsync;
 begin
+  if FChecandoAtualizacao then Exit;
+  FChecandoAtualizacao := True;
   TThread.CreateAnonymousThread(
     procedure
     var
       Info: TUpdateInfo;
+      Encontrou: Boolean;
     begin
+      Encontrou := False;
       try
-        if TfrmUpdate.ChecarAtualizacao(Info) then
-        begin
-          TThread.Queue(nil,
-            procedure
-            begin
-              FLatestUpdateInfo := Info;
-              btnTopUpdate.Caption := 'Atualizar p/ v' + Info.LatestVersion;
-              btnTopUpdate.Visible := False;
-              if Assigned(skTopUpdate) then
-              begin
-                skTopUpdate.Caption := '🚀 Nova Versão: v' + Info.LatestVersion;
-                skTopUpdate.Visible := True;
-              end;
-              LogMessage(Format('🔔 Nova atualização do sistema disponível: v%s! Clique no botão superior para atualizar.', [Info.LatestVersion]));
-            end);
-        end;
+        Encontrou := TfrmUpdate.ChecarAtualizacao(Info);
       except
       end;
+
+      TThread.Queue(nil,
+        procedure
+        var
+          VersaoNova: string;
+        begin
+          FChecandoAtualizacao := False;
+          if not Encontrou then Exit;
+
+          FLatestUpdateInfo := Info;
+          if Info.LatestBuild > 0 then
+            VersaoNova := Format('v%s (Build %d)', [Info.LatestVersion, Info.LatestBuild])
+          else
+            VersaoNova := 'v' + Info.LatestVersion;
+
+          btnTopUpdate.Caption := 'Atualizar p/ ' + VersaoNova;
+          btnTopUpdate.Visible := False;
+          if Assigned(skTopUpdate) then
+          begin
+            skTopUpdate.Caption := '🚀 Nova Versão: v' + Info.LatestVersion;
+            skTopUpdate.Visible := True;
+          end;
+
+          // Modo automático: oferece a atualização uma única vez por versão/build,
+          // com contagem regressiva que o usuário pode adiar.
+          if AppConfig.Atualizacao.AutoAtualizar and (not FTelaAtualizacaoAberta) and
+             (FUltimaAtualizacaoOferecida <> Format('%s.%d', [Info.LatestVersion, Info.LatestBuild])) then
+          begin
+            LogMessage(Format('🔔 Nova atualização %s encontrada no GitHub. Iniciando atualização automática...', [VersaoNova]));
+            AbrirTelaAtualizacao(True);
+          end
+          else
+            LogMessage(Format('🔔 Nova atualização do sistema disponível: %s! Clique no botão superior para atualizar.', [VersaoNova]));
+        end);
     end).Start;
 end;
 
@@ -2382,6 +2460,7 @@ procedure TfrmMain.btnSalvarConfigClick(Sender: TObject);
 var
   CfgFB: TFirebirdConfig;
   CfgCtl: TControlIDDefaultConfig;
+  CfgAtu: TAtualizacaoConfig;
 begin
   CfgFB.Server := Trim(edtCfgServer.Text);
   CfgFB.Port := StrToIntDef(edtCfgPorta.Text, 3060);
@@ -2395,8 +2474,12 @@ begin
   CfgCtl.IntervaloColetaSegundos := StrToIntDef(edtIntervalo.Text, 60);
   CfgCtl.AutoIniciarColeta := chkAutoIniciar.Checked;
 
+  CfgAtu := AppConfig.Atualizacao;
+  CfgAtu.AutoAtualizar := chkAutoAtualizar.Checked;
+
   AppConfig.Firebird := CfgFB;
   AppConfig.ControlID := CfgCtl;
+  AppConfig.Atualizacao := CfgAtu;
   AppConfig.Save;
 
   LogMessage('💾 Configurações do sistema salvas com sucesso no arquivo Config.ini.');

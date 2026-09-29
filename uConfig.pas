@@ -3,10 +3,13 @@
 interface
 
 uses
-  System.SysUtils, System.Classes, System.IniFiles;
+  System.SysUtils, System.Classes, System.IniFiles, uBuildInfo;
 
 const
-  APP_VERSION = '1.0.5';
+  // Versão e build são gerados pelo build.ps1 (ver version.json / uBuildInfo.pas)
+  APP_VERSION = BUILD_VERSION;
+  APP_BUILD = BUILD_NUMBER;
+  APP_BUILD_DATE = BUILD_DATE;
   GITHUB_OWNER = 'wgravinajunior-design';
   GITHUB_REPO = 'ponto-controlid';
 
@@ -14,6 +17,7 @@ type
   TUpdateInfo = record
     HasUpdate: Boolean;
     LatestVersion: string;
+    LatestBuild: Integer;
     ReleaseName: string;
     ReleaseNotes: string;
     DownloadUrl: string;
@@ -44,11 +48,17 @@ type
     AutoIniciarColeta: Boolean;
   end;
 
+  TAtualizacaoConfig = record
+    AutoAtualizar: Boolean;
+    IntervaloVerificacaoMin: Integer;
+  end;
+
   TAppConfig = class
   private
     FIniPath: string;
     FFirebird: TFirebirdConfig;
     FControlID: TControlIDDefaultConfig;
+    FAtualizacao: TAtualizacaoConfig;
   public
     constructor Create(const AIniPath: string = '');
     procedure Load;
@@ -56,10 +66,12 @@ type
 
     property Firebird: TFirebirdConfig read FFirebird write FFirebird;
     property ControlID: TControlIDDefaultConfig read FControlID write FControlID;
+    property Atualizacao: TAtualizacaoConfig read FAtualizacao write FAtualizacao;
     property IniPath: string read FIniPath;
   end;
 
 function AppConfig: TAppConfig;
+function VersaoCompleta: string;
 
 implementation
 
@@ -74,6 +86,11 @@ begin
   if GAppConfig = nil then
     GAppConfig := TAppConfig.Create;
   Result := GAppConfig;
+end;
+
+function VersaoCompleta: string;
+begin
+  Result := Format('v%s  •  Build %d', [APP_VERSION, APP_BUILD]);
 end;
 
 { TAppConfig }
@@ -104,6 +121,9 @@ begin
   FControlID.ModoColeta := 'API';
   FControlID.Portaria671 := True;
   FControlID.AutoIniciarColeta := False;
+
+  FAtualizacao.AutoAtualizar := True;
+  FAtualizacao.IntervaloVerificacaoMin := 60;
 
   Load;
 end;
@@ -144,6 +164,11 @@ begin
     FControlID.ModoColeta := Ini.ReadString('CONTROLID', 'ModoColeta', FControlID.ModoColeta);
     FControlID.Portaria671 := SameText(Ini.ReadString('CONTROLID', 'Portaria671', 'S'), 'S');
     FControlID.AutoIniciarColeta := SameText(Ini.ReadString('CONTROLID', 'AutoIniciarColeta', 'N'), 'S');
+
+    FAtualizacao.AutoAtualizar := SameText(Ini.ReadString('ATUALIZACAO', 'AutoAtualizar', 'S'), 'S');
+    FAtualizacao.IntervaloVerificacaoMin := Ini.ReadInteger('ATUALIZACAO', 'IntervaloVerificacaoMin', FAtualizacao.IntervaloVerificacaoMin);
+    if FAtualizacao.IntervaloVerificacaoMin < 5 then
+      FAtualizacao.IntervaloVerificacaoMin := 5;
   finally
     Ini.Free;
   end;
@@ -184,6 +209,12 @@ begin
       Ini.WriteString('CONTROLID', 'AutoIniciarColeta', 'S')
     else
       Ini.WriteString('CONTROLID', 'AutoIniciarColeta', 'N');
+
+    if FAtualizacao.AutoAtualizar then
+      Ini.WriteString('ATUALIZACAO', 'AutoAtualizar', 'S')
+    else
+      Ini.WriteString('ATUALIZACAO', 'AutoAtualizar', 'N');
+    Ini.WriteInteger('ATUALIZACAO', 'IntervaloVerificacaoMin', FAtualizacao.IntervaloVerificacaoMin);
   finally
     Ini.Free;
   end;

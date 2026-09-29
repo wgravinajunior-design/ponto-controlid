@@ -26,15 +26,30 @@ Sistema completo de integração e gerenciamento de ponto eletrônico para Reló
 ## 📦 Compilação e Deploy
 
 O projeto conta com o script automatizado `build.ps1` que garante:
-1. Normalização de todos os arquivos `.pas` e `.dpr` em UTF-8 com BOM.
-2. Validação da diretiva `<DCC_CodePage>65001</DCC_CodePage>`.
-3. Compilação Release via MSBuild.
-4. Geração automática de tag e release no GitHub via parâmetro `-ReleaseVersion`.
+1. Incremento automático do número de build (`version.json`) e geração de `uBuildInfo.pas` e do VerInfo do executável (`X.Y.Z.Build`).
+2. Normalização de todos os arquivos `.pas` e `.dpr` em UTF-8 com BOM.
+3. Validação da diretiva `<DCC_CodePage>65001</DCC_CodePage>`.
+4. Compilação Release via MSBuild.
+5. Commit, push e publicação da release no GitHub via parâmetro `-ReleaseVersion` (tag `vX.Y.Z`, título `vX.Y.Z (Build N)`).
 
 ```powershell
-# Compilar projeto
+# Compilar projeto (incrementa o build)
 .\build.ps1
 
 # Compilar e publicar nova Release no GitHub
-.\build.ps1 -ReleaseVersion "v1.0.0"
+.\build.ps1 -ReleaseVersion 1.0.2 -ReleaseNotes "Descrição das novidades"
+```
+
+## 🔄 Atualização Automática
+
+- A versão e o build aparecem no cabeçalho, no rodapé e na tela de atualização (ex.: `v1.0.1 • Build 3`).
+- O sistema consulta a última release do GitHub ao abrir e a cada `IntervaloVerificacaoMin` minutos (padrão 60).
+- Há atualização quando a versão da release é maior, ou a mesma versão com build maior.
+- Com `AutoAtualizar=S` (padrão, configurável em Configurações), a tela de atualização abre sozinha com contagem regressiva de 15s; o usuário pode adiar.
+- O executável baixado é validado (tamanho e assinatura `MZ`); o anterior fica salvo como `PontoControlID_old.exe`.
+
+```ini
+[ATUALIZACAO]
+AutoAtualizar=S
+IntervaloVerificacaoMin=60
 ```
