@@ -131,7 +131,7 @@ class _DashboardPageState extends State<DashboardPage> {
       padding: const EdgeInsets.fromLTRB(24, 20, 20, 20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
-        gradient: const LinearGradient(colors: [Color(0xFF1E3A8A), Color(0xFF2563EB), Color(0xFF06B6D4)]),
+        gradient: const LinearGradient(colors: [Color(0xFF2E1A6E), Color(0xFF6B1B9A), Color(0xFFA23DB8)]),
         boxShadow: [BoxShadow(color: AppCores.azul.withValues(alpha: .25), blurRadius: 18, offset: const Offset(0, 8))],
       ),
       child: Row(children: [

@@ -129,7 +129,7 @@ class _LoginPageState extends State<LoginPage> {
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
-              begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF0F172A), Color(0xFF1E3A8A), Color(0xFF0891B2)]),
+              begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF1E0F3D), Color(0xFF2E1A6E), Color(0xFF7B1593)]),
         ),
         child: Center(
           child: SizedBox(
@@ -139,12 +139,12 @@ class _LoginPageState extends State<LoginPage> {
               child: Padding(
                 padding: const EdgeInsets.all(32),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  Image.asset('assets/logo.png', width: 88, height: 88),
+                  Image.asset('assets/logo_goup.png', height: 96, filterQuality: FilterQuality.high),
                   const SizedBox(height: 12),
                   const Text.rich(
                     TextSpan(children: [
                       TextSpan(text: 'Go Up ', style: TextStyle(color: AppCores.azul)),
-                      TextSpan(text: 'Ponto', style: TextStyle(color: Color(0xFF0F172A))),
+                      TextSpan(text: 'Ponto', style: TextStyle(color: Color(0xFF1E0F3D))),
                     ]),
                     style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                   ),

@@ -143,7 +143,7 @@ class _HomeShellState extends State<HomeShell> {
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Text.rich(
                     TextSpan(children: [
-                      TextSpan(text: 'Go Up ', style: TextStyle(color: Color(0xFF60A5FA))),
+                      TextSpan(text: 'Go Up ', style: TextStyle(color: Color(0xFFD8A7F5))),
                       TextSpan(text: 'Ponto', style: TextStyle(color: Colors.white)),
                     ]),
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, letterSpacing: -.3),
@@ -219,7 +219,7 @@ class _HomeShellState extends State<HomeShell> {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               child: Row(children: [
-                Icon(p.icone, size: 20, color: sel ? const Color(0xFF60A5FA) : Colors.white60),
+                Icon(p.icone, size: 20, color: sel ? const Color(0xFFD8A7F5) : Colors.white60),
                 const SizedBox(width: 14),
                 Text(p.titulo,
                     style: TextStyle(
@@ -227,7 +227,7 @@ class _HomeShellState extends State<HomeShell> {
                 if (sel) ...[
                   const Spacer(),
                   Container(
-                      width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFF60A5FA), shape: BoxShape.circle)),
+                      width: 6, height: 6, decoration: const BoxDecoration(color: Color(0xFFD8A7F5), shape: BoxShape.circle)),
                 ],
               ]),
             ),
@@ -238,7 +238,7 @@ class _HomeShellState extends State<HomeShell> {
   Widget _topo(_Pagina atual) => Container(
         padding: const EdgeInsets.fromLTRB(24, 16, 24, 8),
         child: Row(children: [
-          Text(atual.titulo, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+          Text(atual.titulo, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: Color(0xFF1E0F3D))),
           const Spacer(),
           if (_app.atualizacao != null)
             Padding(

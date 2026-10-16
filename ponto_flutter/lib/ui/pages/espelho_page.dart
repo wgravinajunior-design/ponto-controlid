@@ -4,6 +4,7 @@ import '../../core/util.dart';
 import '../../data/database.dart';
 import '../../services/calculo_service.dart';
 import '../app_state.dart';
+import '../theme.dart';
 import '../widgets.dart';
 
 class EspelhoPage extends StatefulWidget {
@@ -201,7 +202,7 @@ class _EspelhoPageState extends State<EspelhoPage> {
       Wrap(spacing: 8, runSpacing: 8, children: [
         Btn('Lançar Justificativa', Icons.note_add, _justificativa, tonal: true),
         Btn('Corrigir / Incluir Batida', Icons.edit_calendar, _corrigirBatida, tonal: true),
-        Btn('Imprimir / Exportar HTML', Icons.print, _exportarHtml, cor: Colors.indigo),
+        Btn('Imprimir / Exportar HTML', Icons.print, _exportarHtml, cor: AppCores.roxo),
       ]),
       const SizedBox(height: 8),
       if (r != null) ...[
@@ -213,7 +214,7 @@ class _EspelhoPageState extends State<EspelhoPage> {
           _resumo('Realizado', minutosParaHora(r.totalTrabalhadoMin)),
           _resumo('Extras 50%', '+${minutosParaHora(r.totalExtras50Min)}', Colors.green.shade700),
           _resumo('Extras 100%', '+${minutosParaHora(r.totalExtras100Min)}', Colors.green.shade800),
-          _resumo('Noturno', minutosParaHora(r.totalNoturnoMin), Colors.indigo),
+          _resumo('Noturno', minutosParaHora(r.totalNoturnoMin), AppCores.roxo),
           _resumo('Atrasos', '-${minutosParaHora(r.totalAtrasosMin)}', Colors.red.shade700),
           _resumo('Interv. suprimido', minutosParaHora(r.totalIntervaloSuprimidoMin), Colors.orange.shade800),
           _resumo('Interjornada', minutosParaHora(r.totalInterjornadaMin), Colors.orange.shade800),

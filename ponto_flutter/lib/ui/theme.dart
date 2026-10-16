@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 
 class AppCores {
-  static const azul = Color(0xFF2563EB);
+  static const azul = Color(0xFF6B1B9A);
   static const verde = Color(0xFF16A34A);
   static const vermelho = Color(0xFFDC2626);
   static const laranja = Color(0xFFEA580C);
   static const roxo = Color(0xFF7C3AED);
   static const fundo = Color(0xFFF1F5F9);
-  static const sidebar = Color(0xFF0F172A);
-  static const sidebar2 = Color(0xFF1E293B);
+  static const sidebar = Color(0xFF1E0F3D);
+  static const sidebar2 = Color(0xFF2E1A6E);
 }
 
 ThemeData temaApp() {
@@ -80,7 +80,7 @@ class KpiCard extends StatelessWidget {
               ),
             ]),
             const SizedBox(height: 6),
-            Text(valor, style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: Color(0xFF0F172A))),
+            Text(valor, style: const TextStyle(fontSize: 34, fontWeight: FontWeight.w800, color: Color(0xFF1E0F3D))),
             if (rodape.isNotEmpty)
               Text(rodape, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: cor)),
           ]),
@@ -104,7 +104,7 @@ class Painel extends StatelessWidget {
         Row(children: [
           Icon(icone, size: 20, color: AppCores.azul),
           const SizedBox(width: 8),
-          Text(titulo, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF0F172A))),
+          Text(titulo, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Color(0xFF1E0F3D))),
         ]),
         const SizedBox(height: 14),
         if (altura != null) Expanded(child: child) else child,
