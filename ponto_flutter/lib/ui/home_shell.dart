@@ -261,7 +261,7 @@ class _HomeShellState extends State<HomeShell> {
                 onTap: _app.alternarAutoColeta,
                 child: StatusChip(
                     _app.semComunicacaoDesde != null
-                        ? '⚠ Relógio sem comunicação desde ${fmtHora(_app.semComunicacaoDesde)}'
+                        ? '⚠ Falha na coleta desde ${fmtHora(_app.semComunicacaoDesde)}'
                         : (_app.autoColetaAtiva ? '⏱ Coleta automática ativa' : '⏸ Coleta parada - clique para iniciar'),
                     _app.semComunicacaoDesde != null ? AppCores.vermelho : (_app.autoColetaAtiva ? AppCores.azul : AppCores.laranja)),
               ),

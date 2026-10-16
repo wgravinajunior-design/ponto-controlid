@@ -194,7 +194,7 @@ class AppState extends ChangeNotifier {
       if (automatico) {
         statusColeta = r.ok
             ? 'Coleta automática ativa • última: ${fmtHoraSeg(DateTime.now())}'
-            : '⚠ Relógio sem comunicação desde ${fmtHora(semComunicacaoDesde)}'
+            : '⚠ Falha na coleta desde ${fmtHora(semComunicacaoDesde)}'
                 '${ultimaColetaOk == null ? '' : ' (última coleta ${fmtHora(ultimaColetaOk)})'}';
       }
     } catch (e) {

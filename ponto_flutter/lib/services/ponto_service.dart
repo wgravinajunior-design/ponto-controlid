@@ -368,9 +368,18 @@ class PontoService {
       final info = await c.getSystemInformation();
       final serial = info?.serial ?? '', fw = info?.fwVersion ?? '';
 
+      // Relógio REP (iDClass) não tem a API de access_logs: o modo correto é o AFD da Portaria 671
+      final logsApi = modo == 'API' ? await c.getAccessLogs(ultimoLog) : null;
+      var logs = logsApi;
+      if (modo == 'API' && logs == null && c.lastError.toLowerCase().contains('invalid command')) {
+        modo = 'AFD_671';
+        c.portaria671 = true;
+        await _db.exec("UPDATE TB_PONTO_RELOGIO SET PRE_MODO_COLETA = 'AFD_671' WHERE PRE_ID = ?", [relogioId]);
+        _log('🔧 [$nome] é um REP e não suporta coleta por API: modo de coleta alterado para AFD Portaria 671.');
+      }
+
       if (modo == 'API') {
         // MODO 1: coleta via API (access_logs)
-        final logs = await c.getAccessLogs(ultimoLog);
         if (logs == null) {
           _log('❌ Falha ao obter registros de acesso em [$nome]: ${formatarErroAmigavel(c.lastError)}', true);
           return null;
@@ -431,8 +440,8 @@ class PontoService {
     }
     if (falhas > 0) {
       // Sem comunicação não é "em dia": as batidas continuam guardadas no relógio e entram quando ele voltar
-      _log('⚠️ Coleta incompleta: $falhas de ${rels.length} relógio(s) sem comunicação. As marcações ficam guardadas no '
-          'relógio e serão importadas quando ele voltar à rede (ou use Importar AFD pelo pendrive).', true);
+      _log('⚠️ Coleta incompleta: $falhas de ${rels.length} relógio(s) com falha (veja o erro acima). As marcações ficam '
+          'guardadas no relógio e serão importadas quando a coleta voltar a funcionar (ou use Importar AFD pelo pendrive).', true);
     } else {
       _log(total > 0
           ? '🎉 Coleta geral finalizada: $total nova(s) batida(s) importada(s) no total!'
