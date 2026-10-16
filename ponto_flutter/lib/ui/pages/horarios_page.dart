@@ -264,6 +264,10 @@ class _HorariosPageState extends State<HorariosPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Largura útil do formulário: tela - menu lateral - margens - grade - espaçamentos - padding do card
+    final wf = (MediaQuery.of(context).size.width - 232 - 48 - 470 - 12 - 32).clamp(340.0, 900.0);
+    final wHora = (wf - 3 * 10) / 4; // 4 horários na primeira linha; carga e tolerância na seguinte
+    final wMeio = (wf - 10) / 2;
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       PageHeader('Horários e Jornadas', Icons.schedule, acoes: [
         Btn('Novo', Icons.add, _limpar, tonal: true),
@@ -271,7 +275,8 @@ class _HorariosPageState extends State<HorariosPage> {
       ]),
       Expanded(
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
+          SizedBox(
+            width: 470,
             child: DataGrid<DbRow>(
               itens: _itens,
               selecionado: _sel,
@@ -279,36 +284,33 @@ class _HorariosPageState extends State<HorariosPage> {
               colunas: [
                 GridCol('ID', 45, (r) => '${r['HOR_ID']}'),
                 GridCol('Descrição', 220, (r) => asStr(r['HOR_DESCRICAO']), flex: true),
-                GridCol('Ent 1', 55, (r) => asStr(r['HOR_ENTRADA_1'])),
-                GridCol('Saí 1', 55, (r) => asStr(r['HOR_SAIDA_1'])),
-                GridCol('Ent 2', 55, (r) => asStr(r['HOR_ENTRADA_2'])),
-                GridCol('Saí 2', 55, (r) => asStr(r['HOR_SAIDA_2'])),
                 GridCol('Carga', 55, (r) => minutosParaHora(asInt(r['HOR_CARGA_DIARIA_MIN']))),
-                GridCol('Tol.', 40, (r) => '${asInt(r['HOR_TOLERANCIA_MIN'])}'),
                 GridCol('Sábado', 80, (r) => asStr(r['HOR_TRABALHA_SABADO']) == 'S'
                     ? 'Trabalha'
                     : (asStr(r['HOR_COMPENSA_SABADO']) == 'S' ? 'Compensa' : 'Folga')),
-                GridCol('Escala', 60, (r) => asStr(r['HOR_TIPO_ESCALA']) == '12X36' ? '12x36' : 'Semanal'),
+                GridCol('Escala', 60, (r) {
+                  final e = asStr(r['HOR_TIPO_ESCALA']);
+                  return e == '12X36' ? '12x36' : (e == 'CICLO' ? '${asInt(r['HOR_CICLO_TRABALHO'])}x${asInt(r['HOR_CICLO_FOLGA'])}' : 'Semanal');
+                }),
                 GridCol('BH', 35, (r) => asStr(r['HOR_BANCO_HORAS']) == 'S' ? 'Sim' : ''),
                 GridCol('Ativo', 45, (r) => asStr(r['HOR_ATIVO'])),
               ],
             ),
           ),
           const SizedBox(width: 12),
-          SizedBox(
-            width: 380,
+          Expanded(
             child: SingleChildScrollView(
               child: Secao(_id > 0 ? 'Horário #$_id' : 'Novo horário', [
                 Wrap(spacing: 10, runSpacing: 12, children: [
-                  Campo('Descrição', _desc, largura: 348),
-                  Campo('1ª Entrada', _e1, largura: 80, dica: 'HH:MM'),
-                  Campo('1ª Saída', _s1, largura: 80, dica: 'HH:MM'),
-                  Campo('2ª Entrada', _e2, largura: 80, dica: 'HH:MM'),
-                  Campo('2ª Saída', _s2, largura: 78, dica: 'HH:MM'),
-                  Campo('Carga diária', _carga, largura: 110, dica: 'HH:MM'),
+                  Campo('Descrição', _desc, largura: wf),
+                  Campo('1ª Entrada', _e1, largura: wHora, dica: 'HH:MM'),
+                  Campo('1ª Saída', _s1, largura: wHora, dica: 'HH:MM'),
+                  Campo('2ª Entrada', _e2, largura: wHora, dica: 'HH:MM'),
+                  Campo('2ª Saída', _s2, largura: wHora, dica: 'HH:MM'),
+                  Campo('Carga diária', _carga, largura: wHora, dica: 'HH:MM'),
                   IconButton(
                       tooltip: 'Calcular carga pelos intervalos', onPressed: _calcularCarga, icon: const Icon(Icons.calculate)),
-                  Campo('Tolerância (min)', _tol, largura: 130),
+                  Campo('Tolerância (min)', _tol, largura: wHora),
                 ]),
                 const SizedBox(height: 8),
                 CheckboxListTile(
@@ -325,8 +327,8 @@ class _HorariosPageState extends State<HorariosPage> {
                     onChanged: (v) => setState(() => _trabalhaSab = v!)),
                 if (_trabalhaSab)
                   Wrap(spacing: 10, children: [
-                    Campo('Sábado entrada', _sabE1, largura: 169, dica: 'HH:MM'),
-                    Campo('Sábado saída', _sabS1, largura: 169, dica: 'HH:MM'),
+                    Campo('Sábado entrada', _sabE1, largura: wMeio, dica: 'HH:MM'),
+                    Campo('Sábado saída', _sabS1, largura: wMeio, dica: 'HH:MM'),
                   ]),
                 const Divider(height: 20),
                 const Text('Regras da jornada', style: TextStyle(fontWeight: FontWeight.w600)),
@@ -343,8 +345,8 @@ class _HorariosPageState extends State<HorariosPage> {
                 const SizedBox(height: 12),
                 Wrap(spacing: 10, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   if (_escala == 'CICLO') ...[
-                    Campo('Dias de trabalho', _cicloTrab, largura: 120),
-                    Campo('Dias de folga', _cicloFolga, largura: 120),
+                    Campo('Dias de trabalho', _cicloTrab, largura: wMeio),
+                    Campo('Dias de folga', _cicloFolga, largura: wMeio),
                   ],
                   if (_escala != 'SEMANAL')
                     OutlinedButton.icon(
@@ -355,8 +357,8 @@ class _HorariosPageState extends State<HorariosPage> {
                         if (d != null) setState(() => _escalaInicio = d);
                       },
                     ),
-                  Campo('Intervalo mínimo (min)', _intervalo, largura: 169),
-                  Campo('Virada do dia', _virada, largura: 169, dica: 'HH:MM'),
+                  Campo('Intervalo mínimo (min)', _intervalo, largura: wMeio),
+                  Campo('Virada do dia', _virada, largura: wMeio, dica: 'HH:MM'),
                 ]),
                 if (_escala == 'SEMANAL')
                   Padding(

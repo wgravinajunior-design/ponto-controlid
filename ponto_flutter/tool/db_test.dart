@@ -44,7 +44,7 @@ Future<void> main(List<String> args) async {
 
   final db = Db.instance;
   check(await db.conectar(), 'conexão + migração (${db.lastMigracaoLog}) ${db.lastError}');
-  check(await db.obterVersaoBanco() == 10, 'versão do schema = 10');
+  check(await db.obterVersaoBanco() == 11, 'versão do schema = 11');
   check(await db.conectar(), 'migração idempotente na 2ª conexão');
 
   final hor = await db.getHorarios();
@@ -143,7 +143,7 @@ Future<void> main(List<String> args) async {
   check((await db.excluirHorario(hid)) != null, 'excluir horário em uso inativa');
   final ex = await db.excluirColaborador(pid);
   check(ex.ok, 'excluir colaborador (inativado=${ex.inativado})');
-  check((await db.obterHistoricoVersoes()).length == 10, 'histórico de versões');
+  check((await db.obterHistoricoVersoes()).length == 11, 'histórico de versões');
   await db.desconectar();
   if (!args.contains('--manter')) File(arq).deleteSync();
   print('\nTODOS OS TESTES PASSARAM');

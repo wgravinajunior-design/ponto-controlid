@@ -8,6 +8,7 @@ import '../../core/config.dart';
 import '../../core/util.dart';
 import '../../data/database.dart';
 import '../../services/controlid_client.dart';
+import '../../services/feriados_service.dart';
 import '../../services/backup_service.dart';
 import '../../services/hamster.dart';
 import '../../services/servico_windows.dart';
@@ -56,6 +57,11 @@ class _ConfigPageState extends State<ConfigPage> {
   final _razao = TextEditingController(), _cnpj = TextEditingController(), _endereco = TextEditingController();
   final _cei = TextEditingController(), _cpfResp = TextEditingController();
   int _docType = 1, _relogioEmp = 0;
+  String _ufEmp = '';
+  int _ibgeEmp = 0;
+  String _municipioEmp = '';
+  List<MunicipioIbge> _municipios = [];
+  bool _buscandoCnpj = false;
   List<DbRow> _relogios = [];
 
   // Versões
@@ -82,6 +88,7 @@ class _ConfigPageState extends State<ConfigPage> {
         _versaoSel = vers.isEmpty ? null : vers.first;
       });
       await _carregarEmpBanco(silencioso: true);
+      _carregarMunicipios();
     } catch (e) {
       _app.logTs('❌ $e', true);
     }
@@ -156,6 +163,36 @@ class _ConfigPageState extends State<ConfigPage> {
     }
   }
 
+  Future<void> _carregarMunicipios() async {
+    if (_ufEmp.isEmpty) return;
+    try {
+      final m = await FeriadosService.municipios(_ufEmp);
+      if (mounted) setState(() => _municipios = m);
+    } catch (_) {
+      // sem internet: o município atual continua válido
+    }
+  }
+
+  /// Preenche razão social, endereço, UF e município pelo CNPJ (consulta à Receita Federal via BrasilAPI).
+  Future<void> _preencherPeloCnpj() async {
+    setState(() => _buscandoCnpj = true);
+    try {
+      final d = await FeriadosService.consultarCnpj(_cnpj.text);
+      setState(() {
+        if (_razao.text.trim().isEmpty) _razao.text = d.razao;
+        if (_endereco.text.trim().isEmpty) _endereco.text = d.endereco;
+        _ufEmp = d.uf;
+        _ibgeEmp = d.codIbge;
+        _municipioEmp = d.municipio;
+      });
+      await _carregarMunicipios();
+    } catch (e) {
+      if (mounted) await mensagem(context, '$e'.replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => _buscandoCnpj = false);
+    }
+  }
+
   Future<void> _carregarEmpBanco({bool silencioso = false}) async {
     final e = await Db.instance.getEmpresaPrincipal();
     if (e == null) {
@@ -166,6 +203,9 @@ class _ConfigPageState extends State<ConfigPage> {
       _razao.text = e.razao;
       _cnpj.text = e.cnpj;
       _endereco.text = e.endereco;
+      _ufEmp = e.uf;
+      _ibgeEmp = e.codIbge;
+      _municipioEmp = e.municipio;
       _docType = onlyDigits(e.cnpj).length == 11 ? 2 : 1;
     });
   }
@@ -442,14 +482,60 @@ class _ConfigPageState extends State<ConfigPage> {
             Campo('CNPJ / CPF', _cnpj, largura: 200),
             Campo('Razão social', _razao, largura: 400),
             Campo('Endereço', _endereco, largura: 560),
+            SizedBox(
+              width: 110,
+              child: DropdownButtonFormField<String>(
+                initialValue: FeriadosService.listaUfs.contains(_ufEmp) ? _ufEmp : null,
+                decoration: const InputDecoration(labelText: 'UF'),
+                items: [for (final u in FeriadosService.listaUfs) DropdownMenuItem(value: u, child: Text(u))],
+                onChanged: (v) {
+                  setState(() {
+                    _ufEmp = v ?? '';
+                    _ibgeEmp = 0;
+                    _municipioEmp = '';
+                    _municipios = [];
+                  });
+                  _carregarMunicipios();
+                },
+              ),
+            ),
+            SizedBox(
+              width: 300,
+              child: DropdownButtonFormField<int>(
+                isExpanded: true,
+                initialValue: _municipios.any((m) => m.codigo == _ibgeEmp) ? _ibgeEmp : null,
+                decoration: InputDecoration(
+                    labelText: 'Município', helperText: _ibgeEmp > 0 && _municipios.isEmpty ? _municipioEmp : null),
+                items: [for (final m in _municipios) DropdownMenuItem(value: m.codigo, child: Text(m.nome))],
+                onChanged: (v) => setState(() {
+                  _ibgeEmp = v ?? 0;
+                  _municipioEmp = _municipios.firstWhere((m) => m.codigo == v).nome;
+                }),
+              ),
+            ),
             Campo('CEI', _cei, largura: 180),
             Campo('CPF do responsável', _cpfResp, largura: 180),
           ]),
           const SizedBox(height: 12),
           Wrap(spacing: 8, runSpacing: 8, children: [
+            Btn(_buscandoCnpj ? 'Consultando...' : 'Preencher pelo CNPJ', Icons.travel_explore, _buscandoCnpj ? null : _preencherPeloCnpj,
+                tonal: true),
             Btn('Carregar do Banco', Icons.download, () => _carregarEmpBanco(), tonal: true),
             Btn('Salvar no Banco', Icons.save, () async {
-              final ok = await Db.instance.salvarEmpresaPrincipal(_razao.text.trim(), _cnpj.text.trim(), _endereco.text.trim());
+              final ok = await Db.instance.salvarEmpresaPrincipal(_razao.text.trim(), _cnpj.text.trim(), _endereco.text.trim(),
+                  uf: _ufEmp, codIbge: _ibgeEmp, municipio: _municipioEmp);
+              if (ok && (_ufEmp.isNotEmpty || _ibgeEmp > 0)) {
+                // UF/município podem ter mudado: refaz os feriados estaduais e municipais em segundo plano
+                () async {
+                  for (final ano in [DateTime.now().year, DateTime.now().year + 1]) {
+                    try {
+                      await FeriadosService.importar(ano, uf: _ufEmp, codIbge: _ibgeEmp);
+                    } catch (_) {}
+                  }
+                  _app.logTs('📅 Feriados de $_municipioEmp/$_ufEmp atualizados.');
+                  _app.dadosAlterados();
+                }();
+              }
               _app.logTs(ok ? '💾 Dados do empregador salvos no banco.' : '❌ Nenhuma empresa encontrada em TB_EMPRESA.', !ok);
               await _app.atualizarEmpregador();
               if (mounted) await mensagem(context, ok ? 'Empregador salvo com sucesso!' : 'Não foi possível salvar o empregador.');

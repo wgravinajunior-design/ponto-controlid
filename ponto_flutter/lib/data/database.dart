@@ -34,7 +34,8 @@ class VersaoBdItem {
 }
 
 class EmpresaInfo {
-  String razao = '', cnpj = '', endereco = '';
+  String razao = '', cnpj = '', endereco = '', uf = '', municipio = '';
+  int codIbge = 0; // código IBGE do município (feriados municipais)
 }
 
 /// Camada de acesso ao Firebird (port do TdmDados / uDataModule.pas).
@@ -459,7 +460,7 @@ class Db {
 
   Future<List<DbRow>> getFeriados() => query(
       "SELECT FER_ID, FER_DATA, FER_DESCRICAO, COALESCE(FER_RECORRENTE, 'S') AS FER_RECORRENTE, "
-      "COALESCE(FER_ABRANGENCIA, 'NACIONAL') AS FER_ABRANGENCIA FROM TB_PONTO_FERIADO "
+      "COALESCE(FER_ABRANGENCIA, 'NACIONAL') AS FER_ABRANGENCIA, COALESCE(FER_ORIGEM, 'MANUAL') AS FER_ORIGEM FROM TB_PONTO_FERIADO "
       'ORDER BY EXTRACT(MONTH FROM FER_DATA), EXTRACT(DAY FROM FER_DATA), FER_DATA');
 
   Future<int> salvarFeriado(int id, DateTime data, String descricao, bool recorrente, String abrangencia) async {
@@ -476,6 +477,23 @@ class Db {
         [...p, id]);
     return id;
   }
+
+  /// Remove os feriados estaduais/municipais importados de um ano (antes de importar de novo).
+  Future<void> removerFeriadosImportados(int ano) => exec(
+      "DELETE FROM TB_PONTO_FERIADO WHERE FER_ORIGEM = 'IMPORTADO' AND FER_DATA BETWEEN ? AND ?",
+      [DateTime(ano, 1, 1), DateTime(ano, 12, 31)]);
+
+  Future<void> inserirFeriadoImportado(DateTime data, String descricao, String abrangencia) => exec(
+      'INSERT INTO TB_PONTO_FERIADO (FER_DATA, FER_DESCRICAO, FER_RECORRENTE, FER_ABRANGENCIA, FER_ORIGEM) '
+      "VALUES (?, ?, 'N', ?, 'IMPORTADO')",
+      [soData(data), _limite(descricao, 80), abrangencia]);
+
+  /// Anos que já têm feriados importados.
+  Future<Set<int>> anosComFeriadosImportados() async => {
+        for (final r in await query(
+            "SELECT DISTINCT EXTRACT(YEAR FROM FER_DATA) AS ANO FROM TB_PONTO_FERIADO WHERE FER_ORIGEM = 'IMPORTADO'"))
+          asInt(r['ANO'])
+      };
 
   Future<void> excluirFeriado(int id) => exec('DELETE FROM TB_PONTO_FERIADO WHERE FER_ID = ?', [id]);
 
@@ -747,7 +765,7 @@ class Db {
   // ======================= Empresa =======================
 
   Future<EmpresaInfo?> getEmpresaPrincipal() async {
-    final r = await queryOne(_first1('EMP_RAZAO_SOCIAL, EMP_CNPJ, EMP_ENDERECO, EMP_NUMERO, EMP_BAIRRO '
+    final r = await queryOne(_first1('EMP_RAZAO_SOCIAL, EMP_CNPJ, EMP_ENDERECO, EMP_NUMERO, EMP_BAIRRO, EMP_UF, EMP_COD_IBGE, EMP_MUNICIPIO '
         "FROM TB_EMPRESA WHERE EMP_STATUS = 'A' OR EMP_STATUS IS NULL ORDER BY EMP_ID"));
     if (r == null) return null;
     var end = asStr(r['EMP_ENDERECO']).trim();
@@ -758,14 +776,18 @@ class Db {
     return EmpresaInfo()
       ..razao = asStr(r['EMP_RAZAO_SOCIAL']).trim()
       ..cnpj = asStr(r['EMP_CNPJ']).trim()
-      ..endereco = end;
+      ..endereco = end
+      ..uf = asStr(r['EMP_UF']).trim().toUpperCase()
+      ..codIbge = asInt(r['EMP_COD_IBGE'])
+      ..municipio = asStr(r['EMP_MUNICIPIO']).trim();
   }
 
-  Future<bool> salvarEmpresaPrincipal(String razao, String cnpj, String endereco) async =>
+  Future<bool> salvarEmpresaPrincipal(String razao, String cnpj, String endereco,
+          {String uf = '', int codIbge = 0, String municipio = ''}) async =>
       await exec(
-          'UPDATE TB_EMPRESA SET EMP_RAZAO_SOCIAL = ?, EMP_CNPJ = ?, EMP_ENDERECO = ? '
-          'WHERE EMP_ID = (SELECT FIRST 1 EMP_ID FROM TB_EMPRESA)',
-          [razao, cnpj, endereco]) >
+          'UPDATE TB_EMPRESA SET EMP_RAZAO_SOCIAL = ?, EMP_CNPJ = ?, EMP_ENDERECO = ?, EMP_UF = ?, EMP_COD_IBGE = ?, '
+          'EMP_MUNICIPIO = ? WHERE EMP_ID = (SELECT FIRST 1 EMP_ID FROM TB_EMPRESA)',
+          [razao, cnpj, endereco, uf.trim().toUpperCase(), codIbge > 0 ? codIbge : null, municipio.trim()]) >
       0;
 
   // ======================= Marcações =======================
@@ -1138,6 +1160,11 @@ class Db {
     await _garantirGenerator('GEN_PONTO_BANCO_HORAS');
 
     // 8. Versão 10: contrato, afastamentos, usuários, jornada por dia, ciclos e biometria do REP
+    // Versão 11: localização da empresa (feriados estaduais e municipais) e origem dos feriados
+    await _addCampo('TB_EMPRESA', 'EMP_UF', 'CHAR(2)');
+    await _addCampo('TB_EMPRESA', 'EMP_COD_IBGE', 'INTEGER');
+    await _addCampo('TB_EMPRESA', 'EMP_MUNICIPIO', 'VARCHAR(60)');
+    await _addCampo('TB_PONTO_FERIADO', 'FER_ORIGEM', "VARCHAR(10) DEFAULT 'MANUAL'");
     await _addCampo('TB_COLABORADOR', 'COL_DATA_ADMISSAO', 'DATE');
     await _addCampo('TB_COLABORADOR', 'COL_DATA_DEMISSAO', 'DATE');
     await _addCampo('TB_COLABORADOR', 'COL_BIOMETRIA_CONTROLID', 'BLOB SUB_TYPE TEXT');
@@ -1184,7 +1211,8 @@ class Db {
     await _sincronizarRegistroVersao(versaoBaseSeparada);
     await _sincronizarRegistroVersao(versaoRegrasClt);
     await _sincronizarRegistroVersao(versaoContratos);
-    return 'Base de dados atualizada com sucesso para a versão de schema ${versaoContratos.numero}.';
+    await _sincronizarRegistroVersao(versaoFeriados);
+    return 'Base de dados atualizada com sucesso para a versão de schema ${versaoFeriados.numero}.';
   }
 
   Future<void> _sincronizarRegistroVersao(VersaoBdDef v) async {

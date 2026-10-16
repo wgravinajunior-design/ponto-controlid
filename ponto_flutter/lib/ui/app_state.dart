@@ -6,6 +6,7 @@ import '../core/config.dart';
 import '../core/util.dart';
 import '../data/database.dart';
 import '../services/backup_service.dart';
+import '../services/feriados_service.dart';
 import '../services/log_service.dart';
 import '../services/ponto_service.dart';
 import '../services/servidor_online.dart';
@@ -89,6 +90,13 @@ class AppState extends ChangeNotifier {
       if (cfg.controlId.autoIniciarColeta && !cfg.modoHamsterDx) iniciarAutoColeta();
       if (cfg.online.ativo) await iniciarServidorOnline();
       BackupService.backupDiario(onLog: logTs);
+      // Feriados estaduais e municipais do ano (segundo plano, só se a empresa tem UF/município e ainda não foram baixados)
+      FeriadosService.atualizarAutomatico().then((r) {
+        if (r != null) {
+          logTs('📅 Feriados atualizados: ${r.estaduais} estaduais e ${r.municipais} municipais.');
+          dadosAlterados();
+        }
+      });
     } else {
       logTs('❌ ${Db.instance.lastError}', true);
       setStatus('Sem conexão com o banco de dados');
