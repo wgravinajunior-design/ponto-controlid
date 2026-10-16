@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../core/build_info.dart';
 import '../services/update_service.dart';
+import 'theme.dart';
 import 'app_state.dart';
 
 /// Tela de atualização (port de TfrmUpdate). Em modo automático, contagem regressiva de 15s.
@@ -80,7 +81,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
           const Divider(),
           ConstrainedBox(
             constraints: const BoxConstraints(maxHeight: 220),
-            child: SingleChildScrollView(child: SelectableText(i.releaseNotes.isEmpty ? i.releaseName : i.releaseNotes)),
+            child: SingleChildScrollView(child: NotasVersao(i.releaseNotes.isEmpty ? i.releaseName : i.releaseNotes)),
           ),
           const SizedBox(height: 12),
           if (_progresso != null) ...[
@@ -105,3 +106,79 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     );
   }
 }
+
+/// Notas da versão (Markdown simples): títulos "##" viram seções com ícone e "-" viram tópicos.
+class NotasVersao extends StatelessWidget {
+  final String notas;
+  const NotasVersao(this.notas, {super.key});
+
+  static (IconData, Color) _estilo(String titulo) {
+    final t = titulo.toLowerCase();
+    if (t.contains('novidade')) return (Icons.auto_awesome_rounded, AppCores.roxo);
+    if (t.contains('melhoria')) return (Icons.trending_up_rounded, AppCores.azul);
+    if (t.contains('corre')) return (Icons.build_circle_rounded, AppCores.laranja);
+    return (Icons.info_outline_rounded, Colors.blueGrey);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final itens = <Widget>[];
+    for (final bruta in notas.split(RegExp(r'\r?\n'))) {
+      final l = bruta.trimRight();
+      if (l.trim().isEmpty) continue;
+      if (l.startsWith('#')) {
+        final titulo = l.replaceFirst(RegExp(r'^#+\s*'), '');
+        final (icone, cor) = _estilo(titulo);
+        itens.add(Padding(
+          padding: const EdgeInsets.only(top: 14, bottom: 6),
+          child: Row(children: [
+            Icon(icone, size: 20, color: cor),
+            const SizedBox(width: 8),
+            Text(titulo, style: TextStyle(fontWeight: FontWeight.w700, fontSize: 15, color: cor)),
+          ]),
+        ));
+      } else if (RegExp(r'^\s*[-*•]\s+').hasMatch(l)) {
+        itens.add(Padding(
+          padding: const EdgeInsets.only(left: 28, top: 3, bottom: 3),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('•  ', style: TextStyle(fontWeight: FontWeight.w700)),
+            Expanded(child: SelectableText(l.replaceFirst(RegExp(r'^\s*[-*•]\s+'), ''))),
+          ]),
+        ));
+      } else {
+        itens.add(Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: SelectableText(l)));
+      }
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: itens);
+  }
+}
+
+/// "O que há de novo": exibido na primeira abertura após uma atualização.
+Future<void> mostrarNovidades(BuildContext context, Novidades n) => showDialog(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+                gradient: const LinearGradient(colors: [AppCores.azul, Color(0xFF06B6D4)]), borderRadius: BorderRadius.circular(12)),
+            child: const Icon(Icons.celebration_rounded, color: Colors.white),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Sistema atualizado!', style: TextStyle(fontWeight: FontWeight.w800)),
+              Text('Go Up Ponto ${n.descricao}', style: const TextStyle(fontSize: 13, color: Colors.grey)),
+            ]),
+          ),
+        ]),
+        content: SizedBox(
+          width: 580,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 420),
+            child: SingleChildScrollView(child: NotasVersao(n.notas)),
+          ),
+        ),
+        actions: [FilledButton.icon(onPressed: () => Navigator.pop(c), icon: const Icon(Icons.check), label: const Text('Entendi'))],
+      ),
+    );

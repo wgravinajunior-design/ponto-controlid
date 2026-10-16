@@ -23,6 +23,7 @@ import 'pages/marcacoes_page.dart';
 import 'pages/relogios_page.dart';
 import 'terminal_page.dart';
 import 'theme.dart';
+import '../services/update_service.dart';
 import 'update_dialog.dart';
 
 class _Pagina {
@@ -66,6 +67,7 @@ class _HomeShellState extends State<HomeShell> {
     super.initState();
     _app.ofertaAtualizacao.addListener(_ofertaAtualizacao);
     _app.iniciar().then((_) {
+      if (mounted) _mostrarNovidades();
       if (mounted && _hamster && AppConfig.instance.relogio.abrirTerminalAoIniciar && _app.conectado) _abrirTerminal();
     });
   }
@@ -286,8 +288,67 @@ class _HomeShellState extends State<HomeShell> {
           const Spacer(),
           if (_app.empregadorRodape.isNotEmpty)
             Text('🏢 ${_app.empregadorRodape}', style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          const SizedBox(width: 16),
+          _statusAtualizacao(),
         ]),
       );
+
+  /// Rodapé: "Atualização disponível" (clique para atualizar) ou "Sistema atualizado" (clique para verificar).
+  Widget _statusAtualizacao() {
+    final u = _app.atualizacao;
+    if (u != null) {
+      return Tooltip(
+        message: 'Clique para ver as novidades e atualizar',
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () => mostrarAtualizacao(context, u),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            decoration: BoxDecoration(color: AppCores.laranja, borderRadius: BorderRadius.circular(20)),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.system_update_alt_rounded, size: 15, color: Colors.white),
+              const SizedBox(width: 6),
+              Text('Atualização disponível: ${u.descricao}  •  clique para atualizar',
+                  style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w700)),
+            ]),
+          ),
+        ),
+      );
+    }
+    final quando = _app.ultimaChecagem == null ? '' : ' (verificado às ${fmtHora(_app.ultimaChecagem)})';
+    return Tooltip(
+      message: 'Clique para verificar agora',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(20),
+        onTap: _app.checandoAtualizacao ? null : _verificarAgora,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            if (_app.checandoAtualizacao)
+              const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(strokeWidth: 2))
+            else
+              Icon(Icons.check_circle_outline, size: 14, color: Colors.green.shade700),
+            const SizedBox(width: 6),
+            Text(_app.checandoAtualizacao ? 'Verificando atualizações...' : '${versaoCompleta()} - sistema atualizado$quando',
+                style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _verificarAgora() async {
+    await _app.checarAtualizacao();
+    if (mounted && _app.atualizacao == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('O sistema já está na versão mais recente.')));
+    }
+  }
+
+  /// Primeira abertura após atualizar: mostra o que veio de novo nesta versão.
+  Future<void> _mostrarNovidades() async {
+    final n = await UpdateService.novidadesDaVersaoAtual();
+    if (n != null && mounted) await mostrarNovidades(context, n);
+  }
 
   Widget _painelLog(ColorScheme cs) => Container(
         decoration: BoxDecoration(border: Border(top: BorderSide(color: cs.outlineVariant))),

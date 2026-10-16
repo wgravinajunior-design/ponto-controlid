@@ -185,11 +185,19 @@ class AppState extends ChangeNotifier {
 
   // ---------------- Atualização ----------------
 
+  /// Estado exibido no rodapé: quando foi a última consulta e se uma consulta está em andamento.
+  DateTime? ultimaChecagem;
+  bool checandoAtualizacao = false;
+
   Future<void> checarAtualizacao() async {
+    checandoAtualizacao = true;
+    notifyListeners();
     final info = await UpdateService.checarAtualizacao();
-    if (info == null) return;
+    checandoAtualizacao = false;
+    ultimaChecagem = DateTime.now();
     atualizacao = info;
     notifyListeners();
+    if (info == null) return;
     final chave = '${info.latestVersion}.${info.latestBuild}';
     if (AppConfig.instance.atualizacao.autoAtualizar && _ultimaOferecida != chave) {
       _ultimaOferecida = chave;

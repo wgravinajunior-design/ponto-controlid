@@ -42,6 +42,7 @@ class ControlIdDefaultConfig {
 class AtualizacaoConfig {
   bool autoAtualizar = true;
   int intervaloVerificacaoMin = 60;
+  String ultimaVista = ''; // última versão/build cujas novidades já foram mostradas ("2.4.0.3")
 }
 
 /// Exportação para a folha de pagamento (códigos das rubricas no sistema da contabilidade).
@@ -159,6 +160,7 @@ class AppConfig {
     atualizacao
       ..autoAtualizar = b('ATUALIZACAO', 'AutoAtualizar', true)
       ..intervaloVerificacaoMin = i('ATUALIZACAO', 'IntervaloVerificacaoMin', 60);
+    atualizacao.ultimaVista = s('ATUALIZACAO', 'UltimaVista', '');
     if (atualizacao.intervaloVerificacaoMin < 5) atualizacao.intervaloVerificacaoMin = 5;
 
     relogio
@@ -232,6 +234,7 @@ class AppConfig {
 
     w('ATUALIZACAO', 'AutoAtualizar', sn(atualizacao.autoAtualizar));
     w('ATUALIZACAO', 'IntervaloVerificacaoMin', atualizacao.intervaloVerificacaoMin);
+    w('ATUALIZACAO', 'UltimaVista', atualizacao.ultimaVista);
 
     w('RELOGIO', 'Tipo', tipoRelogioParaStr(relogio.tipo));
     w('RELOGIO', 'NivelSeguranca', relogio.nivelSeguranca);
