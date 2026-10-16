@@ -176,13 +176,27 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Quando a coleta começou a falhar por falta de comunicação com o relógio (null = tudo bem).
+  DateTime? semComunicacaoDesde, ultimaColetaOk;
+
   Future<void> coletarAgora({bool automatico = false}) async {
     if (_coletando) return;
     _coletando = true;
     try {
       final r = await ponto.coletarTodosRelogios();
       if (r.total > 0) dadosAlterados();
-      if (automatico) statusColeta = 'Coleta automática ativa • última: ${fmtHoraSeg(DateTime.now())}';
+      if (r.ok) {
+        semComunicacaoDesde = null;
+        ultimaColetaOk = DateTime.now();
+      } else {
+        semComunicacaoDesde ??= DateTime.now();
+      }
+      if (automatico) {
+        statusColeta = r.ok
+            ? 'Coleta automática ativa • última: ${fmtHoraSeg(DateTime.now())}'
+            : '⚠ Relógio sem comunicação desde ${fmtHora(semComunicacaoDesde)}'
+                '${ultimaColetaOk == null ? '' : ' (última coleta ${fmtHora(ultimaColetaOk)})'}';
+      }
     } catch (e) {
       logTs('❌ Erro na coleta: $e', true);
     } finally {

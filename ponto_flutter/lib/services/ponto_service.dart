@@ -420,18 +420,24 @@ class PontoService {
       _log('ℹ️ Nenhum relógio de ponto ativo configurado para coleta.');
       return (ok: true, total: 0);
     }
-    var total = 0, ok = true;
+    var total = 0, falhas = 0;
     for (final r in rels) {
       final n = await coletarMarcacoes(asInt(r['PRE_ID']));
       if (n == null) {
-        ok = false;
+        falhas++;
       } else {
         total += n;
       }
     }
-    _log(total > 0
-        ? '🎉 Coleta geral finalizada: $total nova(s) batida(s) importada(s) no total!'
-        : 'ℹ️ Coleta geral finalizada: todos os relógios estão em dia (nenhuma batida pendente).');
-    return (ok: ok, total: total);
+    if (falhas > 0) {
+      // Sem comunicação não é "em dia": as batidas continuam guardadas no relógio e entram quando ele voltar
+      _log('⚠️ Coleta incompleta: $falhas de ${rels.length} relógio(s) sem comunicação. As marcações ficam guardadas no '
+          'relógio e serão importadas quando ele voltar à rede (ou use Importar AFD pelo pendrive).', true);
+    } else {
+      _log(total > 0
+          ? '🎉 Coleta geral finalizada: $total nova(s) batida(s) importada(s) no total!'
+          : 'ℹ️ Coleta geral finalizada: todos os relógios estão em dia (nenhuma batida pendente).');
+    }
+    return (ok: falhas == 0, total: total);
   }
 }
