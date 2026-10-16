@@ -146,6 +146,23 @@ class _BancoHorasPageState extends State<BancoHorasPage> {
         Btn('Novo lançamento', Icons.add, _lancar, tonal: true),
         Btn('Atualizar', Icons.refresh, _carregar, tonal: true),
       ]),
+      if (_saldos.isNotEmpty && !_saldos.any((s) => s.usaBanco))
+        Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(color: AppCores.laranja.withValues(alpha: .08), borderRadius: BorderRadius.circular(12)),
+          child: const Row(children: [
+            Icon(Icons.info_outline_rounded, color: AppCores.laranja),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                  'Nenhuma jornada usa banco de horas. Para usar, abra Horários, selecione a jornada e marque '
+                  '"Banco de horas". Depois, feche a competência aqui: as horas extras 50% e os atrasos do mês viram crédito '
+                  'e débito do colaborador (e deixam de ir para a folha).'),
+            ),
+          ]),
+        ),
       Expanded(
         child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Expanded(
@@ -161,6 +178,8 @@ class _BancoHorasPageState extends State<BancoHorasPage> {
               colunas: [
                 GridCol('Colaborador', 200, (s) => s.nome, flex: true),
                 GridCol('Jornada', 160, (s) => s.jornada),
+                GridCol('Banco de horas', 110, (s) => s.usaBanco ? 'Ativo' : 'Desativado',
+                    cor: (s) => s.usaBanco ? AppCores.verde : Colors.grey),
                 GridCol('Saldo', 80, (s) => minutosParaHora(s.saldoMin, exibirSinal: true),
                     cor: (s) => s.saldoMin >= 0 ? AppCores.verde : AppCores.vermelho),
                 GridCol('Vencendo ($venc meses)', 120, (s) => s.minutosVencidos > 0 ? minutosParaHora(s.minutosVencidos) : '',

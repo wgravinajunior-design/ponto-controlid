@@ -9,6 +9,7 @@ class SaldoBanco {
   final int pessoaId;
   final String nome, jornada;
   int saldoMin = 0;
+  bool usaBanco = false; // a jornada do colaborador usa banco de horas
   int minutosVencidos = 0; // créditos não compensados além do prazo (devem ser pagos)
   String ultimaCompetencia = '';
   SaldoBanco(this.pessoaId, this.nome, this.jornada);
@@ -34,8 +35,8 @@ class BancoHorasService {
       final pid = asInt(c['PES_ID']);
       final h = horarios[asInt(c['COL_HORARIO']) > 0 ? asInt(c['COL_HORARIO']) : 1];
       final lista = porPessoa[pid] ?? const <DbRow>[];
-      if (asStr(h?['HOR_BANCO_HORAS']) != 'S' && lista.isEmpty) continue;
-      final s = SaldoBanco(pid, asStr(c['PES_RSOCIAL_NOME']), asStr(h?['HOR_DESCRICAO']));
+      final s = SaldoBanco(pid, asStr(c['PES_RSOCIAL_NOME']), asStr(h?['HOR_DESCRICAO']))
+        ..usaBanco = asStr(h?['HOR_BANCO_HORAS']) == 'S';
 
       // Compensação FIFO: débitos consomem os créditos mais antigos
       final creditos = <List<dynamic>>[]; // [data, minutos restantes]

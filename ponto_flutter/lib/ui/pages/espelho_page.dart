@@ -26,7 +26,19 @@ class _EspelhoPageState extends State<EspelhoPage> {
     final h = DateTime.now();
     _ini = DateTime(h.year, h.month, 1);
     _fim = DateTime(h.year, h.month + 1, 0);
+    _app.versaoDados.addListener(_aoMudarDados);
     _carregarColabs();
+  }
+
+  @override
+  void dispose() {
+    _app.versaoDados.removeListener(_aoMudarDados);
+    super.dispose();
+  }
+
+  /// Batida nova (coleta, importação, ajuste): refaz a apuração mostrada, sem janela de progresso.
+  void _aoMudarDados() {
+    if (_pessoaId > 0 && mounted) _calcular(silencioso: true);
   }
 
   Future<void> _carregarColabs() async {
@@ -36,22 +48,27 @@ class _EspelhoPageState extends State<EspelhoPage> {
       _colabs = c;
       if (_pessoaId == 0 && c.isNotEmpty) _pessoaId = asInt(c.first['PES_ID']);
     });
+    if (_pessoaId > 0 && _espelho == null) _calcular(silencioso: true);
   }
 
   String get _nomeColab =>
       asStr(_colabs.firstWhere((c) => asInt(c['PES_ID']) == _pessoaId, orElse: () => {})['PES_RSOCIAL_NOME']);
 
-  Future<void> _calcular() async {
-    if (_pessoaId <= 0) return mensagem(context, 'Selecione um colaborador.');
-    final e = await comProgresso(context, () => PontoCalculoService.calcularEspelho(_pessoaId, _ini, _fim),
-        texto: 'Apurando ponto...');
-    if (e != null) {
+  Future<void> _calcular({bool silencioso = false}) async {
+    if (_pessoaId <= 0) return silencioso ? null : mensagem(context, 'Selecione um colaborador.');
+    final e = silencioso
+        ? await PontoCalculoService.calcularEspelho(_pessoaId, _ini, _fim)
+        : await comProgresso(context, () => PontoCalculoService.calcularEspelho(_pessoaId, _ini, _fim),
+            texto: 'Apurando ponto...');
+    if (e != null && mounted) {
       setState(() {
         _espelho = e;
         _sel = null;
       });
-      _app.logTs('🧮 Espelho de ponto apurado para ${e.resumo.colaboradorNome} '
+      if (!silencioso) {
+        _app.logTs('🧮 Espelho de ponto apurado para ${e.resumo.colaboradorNome} '
           '(${fmtData(_ini)} a ${fmtData(_fim)}): saldo ${minutosParaHora(e.resumo.saldoTotalMin, exibirSinal: true)}.');
+      }
     }
   }
 
@@ -165,11 +182,20 @@ class _EspelhoPageState extends State<EspelhoPage> {
               for (final c in _colabs)
                 DropdownMenuItem(value: asInt(c['PES_ID']), child: Text(asStr(c['PES_RSOCIAL_NOME'])))
             ],
-            onChanged: (v) => setState(() => _pessoaId = v ?? 0),
+            onChanged: (v) {
+              setState(() => _pessoaId = v ?? 0);
+              _calcular(silencioso: true);
+            },
           ),
         ),
-        _data('De', _ini, (d) => setState(() => _ini = d)),
-        _data('Até', _fim, (d) => setState(() => _fim = d)),
+        _data('De', _ini, (d) {
+          setState(() => _ini = d);
+          _calcular(silencioso: true);
+        }),
+        _data('Até', _fim, (d) {
+          setState(() => _fim = d);
+          _calcular(silencioso: true);
+        }),
         Btn('Apurar Ponto', Icons.calculate, _calcular),
       ]),
       Wrap(spacing: 8, runSpacing: 8, children: [
