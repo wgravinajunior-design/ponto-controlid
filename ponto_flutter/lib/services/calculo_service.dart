@@ -219,7 +219,8 @@ class PontoCalculoService {
 
   static Future<EspelhoPonto> calcularEspelho(int pessoaId, DateTime dataIni, DateTime dataFim) async {
     final esp = EspelhoPonto();
-    final ini = soData(dataIni), fim = soData(dataFim);
+    final hoje = soData(DateTime.now());
+    final ini = soData(dataIni), fim = soData(dataFim).isAfter(hoje) ? hoje : soData(dataFim); // dias futuros não são apurados
     if (pessoaId <= 0 || ini.isAfter(fim)) return esp;
     final db = Db.instance;
 
