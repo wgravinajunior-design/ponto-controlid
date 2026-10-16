@@ -288,11 +288,23 @@ class ControlIdClient {
   Future<List<ControlIdUser>?> getUsers() async {
     if (!await ensureSession()) return null;
     // 1. load_users.fcgi (REP iDClass)
+    // O relógio aceita no máximo 100 usuários por consulta: busca por páginas
+    const pagina = 100;
     var r = await _post(buildUrl('load_users.fcgi', extra: _modo),
-        portaria671 ? '{"limit":1000,"offset":0,"templates":true}' : '{"limit":1000,"offset":0}');
+        '{"limit":$pagina,"offset":0${portaria671 ? ',"templates":true' : ''}}');
     if (r.code == 200) {
-      final arr = _json(r.body)?['users'];
-      if (arr is List) {
+      final j0 = _json(r.body);
+      final arr = <dynamic>[...(j0?['users'] is List ? j0!['users'] as List : const [])];
+      final total = _int(j0?['count']);
+      while (j0 != null && arr.length < total) {
+        final resp = await _post(buildUrl('load_users.fcgi', extra: _modo),
+            '{"limit":$pagina,"offset":${arr.length}${portaria671 ? ',"templates":true' : ''}}');
+        final pj = resp.code == 200 ? _json(resp.body) : null;
+        final l = pj == null ? null : pj['users'];
+        if (l is! List || l.isEmpty) break;
+        arr.addAll(l);
+      }
+      if (j0?['users'] is List) {
         return [
           for (final u in arr.whereType<Map>())
             () {

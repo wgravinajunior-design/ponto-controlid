@@ -23,11 +23,24 @@ class PontoService {
         host: asStr(r['PRE_IP']), port: porta, useSsl: asStr(r['PRE_USAR_SSL']).toUpperCase() == 'S')
       ..user = asStr(r['PRE_USUARIO'])
       ..password = asStr(r['PRE_SENHA'])
-      ..portaria671 = asStr(r['PRE_MODO_COLETA']).toUpperCase() == 'AFD_671';
+      ..portaria671 = asStr(r['PRE_MODO_COLETA']).toUpperCase() == 'AFD_671'
+      // O iDClass fica lento ao gravar batidas/digitais: 5s era pouco e gerava falsos "sem resposta"
+      ..timeoutSec = 20;
   }
 
-  /// Abre relógio + sessão; executa [acao] e faz logout.
-  Future<T?> _comRelogio<T>(int relogioId, String falhaLogin, Future<T?> Function(ControlIdClient c, String nome, DbRow r) acao) async {
+  // Uma operação por vez em cada relógio: sessões simultâneas deixam o iDClass lento e geram "sem resposta"
+  static final _filas = <int, Future<void>>{};
+
+  /// Abre relógio + sessão; executa [acao] e faz logout (operações no mesmo relógio entram em fila).
+  Future<T?> _comRelogio<T>(int relogioId, String falhaLogin, Future<T?> Function(ControlIdClient c, String nome, DbRow r) acao) {
+    final anterior = _filas[relogioId] ?? Future<void>.value();
+    final minha = anterior.catchError((_) {}).then((_) => _comRelogioDireto<T>(relogioId, falhaLogin, acao));
+    _filas[relogioId] = minha.then((_) {}, onError: (_) {});
+    return minha;
+  }
+
+  Future<T?> _comRelogioDireto<T>(
+      int relogioId, String falhaLogin, Future<T?> Function(ControlIdClient c, String nome, DbRow r) acao) async {
     final r = await _db.getRelogioPorId(relogioId);
     if (r == null) {
       _log('❌ Relógio #$relogioId não encontrado no banco de dados.', true);
@@ -35,8 +48,22 @@ class PontoService {
     }
     final nome = asStr(r['PRE_NOME']);
     var c = _cliente(r);
-    if (!await c.login(c.user, c.password)) {
-      // Sem resposta no IP cadastrado: o relógio pode ter recebido outro IP (DHCP)
+    var logou = await c.login(c.user, c.password);
+    if (!logou && c.lastError.startsWith('Falha de comunicação')) {
+      // Relógio ocupado (processando uma batida, digital ou sincronização): espera e tenta de novo no mesmo IP
+      // antes de achar que ele mudou de endereço
+      final ip = asStr(r['PRE_IP']);
+      final porta = asInt(r['PRE_PORTA']) > 0 ? asInt(r['PRE_PORTA']) : 80;
+      if (await DescobertaService.portaAberta(ip, porta, const Duration(seconds: 3))) {
+        for (var tentativa = 1; tentativa <= 2 && !logou; tentativa++) {
+          _log('⏳ [$nome] está ocupado. Nova tentativa $tentativa de 2 em 5 segundos...');
+          await Future.delayed(const Duration(seconds: 5));
+          logou = await c.login(c.user, c.password);
+        }
+      }
+    }
+    if (!logou) {
+      // Porta fechada / sem resposta: o relógio pode ter recebido outro IP (DHCP)
       final novo = c.lastError.startsWith('Falha de comunicação') ? await _relocalizar(relogioId, r) : null;
       if (novo == null) {
         _log('❌ $falhaLogin [$nome]: ${formatarErroAmigavel(c.lastError)}', true);

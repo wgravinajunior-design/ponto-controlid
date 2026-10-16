@@ -40,7 +40,7 @@ class DescobertaService {
     return redes.toList()..sort();
   }
 
-  static Future<bool> _portaAberta(String ip, int porta, Duration timeout) async {
+  static Future<bool> portaAberta(String ip, int porta, Duration timeout) async {
     try {
       final s = await Socket.connect(ip, porta, timeout: timeout);
       s.destroy();
@@ -119,7 +119,7 @@ class DescobertaService {
       final lote = alvos.sublist(i, i + paralelo > alvos.length ? alvos.length : i + paralelo);
       await Future.wait(lote.map((ip) async {
         for (final (porta, ssl) in _portas) {
-          if (!await _portaAberta(ip, porta, timeout)) continue;
+          if (!await portaAberta(ip, porta, timeout)) continue;
           final r = await identificar(ip, porta, ssl, usuario: usuario, senha: senha);
           if (r != null) {
             achados.add(r);
