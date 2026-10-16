@@ -250,3 +250,11 @@ RUNNING SCRIPT [actVersao240] ...
   ALTER TABLE TB_EMPRESA ... OK
   ALTER TABLE TB_PONTO_FERIADO ... OK
 SCRIPT FINALIZADO COM SUCESSO.''');
+
+const versaoTipoBatida = VersaoBdDef(12, '2.5.0', 'actVersao250',
+    'Entrada/Saída identificadas em todas as marcações e importação de AFD por pendrive', '''
+-- Sem alteração de estrutura. As marcações coletadas antes (tipo "Batida Ponto") são reclassificadas
+-- como Entrada (E) ou Saída (S) pela ordem de cada dia.''', '''
+RUNNING SCRIPT [actVersao250] ...
+  Reclassificação das marcações antigas em Entrada/Saída ... OK
+SCRIPT FINALIZADO COM SUCESSO.''');

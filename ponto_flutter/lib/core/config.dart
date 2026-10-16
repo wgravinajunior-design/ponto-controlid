@@ -36,7 +36,7 @@ class ControlIdDefaultConfig {
   int intervaloColetaSegundos = 60;
   String modoColeta = 'API';
   bool portaria671 = true;
-  bool autoIniciarColeta = false;
+  bool autoIniciarColeta = true;
 }
 
 class AtualizacaoConfig {
@@ -155,7 +155,8 @@ class AppConfig {
       ..intervaloColetaSegundos = i('CONTROLID', 'IntervaloColetaSegundos', controlId.intervaloColetaSegundos)
       ..modoColeta = s('CONTROLID', 'ModoColeta', controlId.modoColeta)
       ..portaria671 = b('CONTROLID', 'Portaria671', true)
-      ..autoIniciarColeta = b('CONTROLID', 'AutoIniciarColeta', false);
+      // Coleta automática: ligada por padrão (chave nova; o AutoIniciarColeta=N do Config.ini do Delphi é ignorado)
+      ..autoIniciarColeta = b('COLETA', 'Automatica', true);
 
     atualizacao
       ..autoAtualizar = b('ATUALIZACAO', 'AutoAtualizar', true)
@@ -230,7 +231,7 @@ class AppConfig {
     w('CONTROLID', 'IntervaloColetaSegundos', controlId.intervaloColetaSegundos);
     w('CONTROLID', 'ModoColeta', controlId.modoColeta);
     w('CONTROLID', 'Portaria671', sn(controlId.portaria671));
-    w('CONTROLID', 'AutoIniciarColeta', sn(controlId.autoIniciarColeta));
+    w('COLETA', 'Automatica', sn(controlId.autoIniciarColeta));
 
     w('ATUALIZACAO', 'AutoAtualizar', sn(atualizacao.autoAtualizar));
     w('ATUALIZACAO', 'IntervaloVerificacaoMin', atualizacao.intervaloVerificacaoMin);

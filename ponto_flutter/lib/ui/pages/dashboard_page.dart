@@ -154,7 +154,7 @@ class _DashboardPageState extends State<DashboardPage> {
             }),
             _bannerBtn(_app.autoColetaAtiva ? 'Parar coleta' : 'Coleta automática',
                 _app.autoColetaAtiva ? Icons.pause_rounded : Icons.play_arrow_rounded, () {
-              _app.autoColetaAtiva ? _app.pararAutoColeta() : _app.iniciarAutoColeta();
+              _app.alternarAutoColeta();
               setState(() {});
             }),
           ],
@@ -335,7 +335,8 @@ class _DashboardPageState extends State<DashboardPage> {
           leading: CircleAvatar(
               radius: 18, backgroundColor: cor.withValues(alpha: .12), child: Icon(icone, color: cor, size: 20)),
           title: Text(asStr(m['PESSOA_NOME']), maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Text(o == 'M' ? 'Lançamento manual' : (o == 'B' ? 'Biometria' : asStr(m['RELOGIO_NOME']))),
+          subtitle: Text('${nomeTipoBatida(asStr(m['PMA_TIPO_BATIDA']))}  •  '
+              '${o == 'M' ? 'Lançamento manual' : (o == 'B' ? 'Biometria' : asStr(m['RELOGIO_NOME']))}'),
           trailing: Column(mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.end, children: [
             Text(fmtHora(dh), style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15)),
             Text(fmtData(dh), style: const TextStyle(fontSize: 11, color: Colors.grey)),

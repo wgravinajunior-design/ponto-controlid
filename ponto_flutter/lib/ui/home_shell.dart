@@ -254,8 +254,15 @@ class _HomeShellState extends State<HomeShell> {
               _app.conectado ? AppCores.verde : AppCores.vermelho),
           if (!_hamster) ...[
             const SizedBox(width: 8),
-            StatusChip(_app.autoColetaAtiva ? '⏱ Coleta automática ativa' : '⏸ Coleta parada',
-                _app.autoColetaAtiva ? AppCores.azul : Colors.blueGrey),
+            Tooltip(
+              message: _app.autoColetaAtiva ? 'Clique para parar a coleta automática' : 'Clique para iniciar a coleta automática',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(20),
+                onTap: _app.alternarAutoColeta,
+                child: StatusChip(_app.autoColetaAtiva ? '⏱ Coleta automática ativa' : '⏸ Coleta parada - clique para iniciar',
+                    _app.autoColetaAtiva ? AppCores.azul : AppCores.laranja),
+              ),
+            ),
           ],
         ]),
       );

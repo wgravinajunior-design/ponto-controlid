@@ -12,6 +12,7 @@ import '../../data/database.dart';
 import '../../services/comprovante_service.dart';
 import '../../services/relatorio_service.dart';
 import '../app_state.dart';
+import '../importar_afd_dialog.dart';
 import '../widgets.dart';
 
 class MarcacoesPage extends StatefulWidget {
@@ -272,6 +273,9 @@ class _MarcacoesPageState extends State<MarcacoesPage> {
         ),
         Btn('Exportar TXT', Icons.file_download, _exportar, tonal: true),
         Btn('Relatório E/S', Icons.print, _relatorioES, cor: Colors.indigo),
+        Btn('Importar AFD (pendrive)', Icons.usb_rounded, () async {
+          if (await importarAfdDoPendrive(context)) _filtrar();
+        }, cor: Colors.teal),
         Btn('Comprovante', Icons.receipt_long, () async {
           final m = _sel;
           if (m == null) return mensagem(context, 'Selecione uma marcação.');
@@ -298,7 +302,8 @@ class _MarcacoesPageState extends State<MarcacoesPage> {
                 cor: (r) => asStr(r['PMA_DESCONSIDERADA']) == 'S' ? Colors.grey : Colors.green.shade700),
             GridCol('Data/Hora', 140, (r) => fmtDataHora(asDate(r['PMA_DATA_HORA']))),
             GridCol('Colaborador', 220, (r) => asStr(r['PESSOA_NOME']), flex: true),
-            GridCol('Tipo', 50, (r) => asStr(r['PMA_TIPO_BATIDA'])),
+            GridCol('Tipo', 75, (r) => nomeTipoBatida(asStr(r['PMA_TIPO_BATIDA'])),
+                cor: (r) => asStr(r['PMA_TIPO_BATIDA']) == 'E' ? Colors.green.shade700 : (asStr(r['PMA_TIPO_BATIDA']) == 'S' ? Colors.indigo : null)),
             GridCol('Relógio', 130, (r) => asStr(r['RELOGIO_NOME'])),
             GridCol('NSR', 80, (r) => asStr(r['PMA_NSR'])),
             GridCol('Identificação', 120, (r) => asStr(r['PMA_TIPO_IDENTIFICACAO'])),

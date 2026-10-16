@@ -90,3 +90,15 @@ DateTime? asDate(dynamic v) {
   if (v is DateTime) return v;
   return DateTime.tryParse(v.toString());
 }
+
+/// "E" -> "Entrada", "S" -> "Saída" (valores antigos como "Batida Ponto" aparecem como estão).
+String nomeTipoBatida(String t) {
+  switch (t.trim().toUpperCase()) {
+    case 'E':
+      return 'Entrada';
+    case 'S':
+      return 'Saída';
+    default:
+      return t == 'Batida Ponto' ? '' : t;
+  }
+}

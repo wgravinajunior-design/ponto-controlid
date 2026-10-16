@@ -793,24 +793,67 @@ class Db {
   // ======================= Marcações =======================
 
   Future<bool> gravarMarcacao(int pessoaId, int relogioId, DateTime dataHora, int evento, int controlIdLogId,
-      String origem, int nsr, String pis, String cpf, String tipoBatida, String tipoIdent) async {
+      String origem, int nsr, String pis, String cpf, String tipoBatida, String tipoIdent,
+      {bool recalcularTipo = true}) async {
     try {
-      final r = await queryOne(
-          'SELECT PMA_ID FROM TB_PONTO_MARCACAO WHERE PMA_RELOGIO = ? AND PMA_CONTROLID_LOG_ID = ?',
-          [relogioId, controlIdLogId]);
+      final r = relogioId > 0
+          ? await queryOne('SELECT PMA_ID FROM TB_PONTO_MARCACAO WHERE PMA_RELOGIO = ? AND PMA_CONTROLID_LOG_ID = ?',
+              [relogioId, controlIdLogId])
+          : await queryOne('SELECT PMA_ID FROM TB_PONTO_MARCACAO WHERE PMA_RELOGIO IS NULL AND PMA_CONTROLID_LOG_ID = ?',
+              [controlIdLogId]);
       if (r != null) return true; // já gravado
       await exec(
           'INSERT INTO TB_PONTO_MARCACAO (PMA_PESSOA, PMA_RELOGIO, PMA_DATA_HORA, PMA_EVENTO, PMA_CONTROLID_LOG_ID, '
           'PMA_ORIGEM, PMA_NSR, PMA_PIS, PMA_CPF, PMA_TIPO_BATIDA, PMA_TIPO_IDENTIFICACAO, PMA_EXPORTADO) '
           "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'N')",
           [
-            pessoaId > 0 ? pessoaId : null, relogioId, dataHora, evento, controlIdLogId,
+            pessoaId > 0 ? pessoaId : null, relogioId > 0 ? relogioId : null, dataHora, evento, controlIdLogId,
             origem.isEmpty ? 'C' : origem.substring(0, 1), nsr, pis, cpf, tipoBatida, tipoIdent
           ]);
+      if (recalcularTipo && pessoaId > 0) await recalcularTiposDia(pessoaId, dataHora);
       return true;
     } catch (e) {
       lastError = 'Erro ao gravar marcação: $e';
       return false;
+    }
+  }
+
+  /// Corrige as batidas antigas (coletadas sem tipo) uma única vez, na atualização da base.
+  Future<void> _recalcularTiposPendentes() async {
+    final dias = await query(
+        'SELECT DISTINCT PMA_PESSOA, CAST(PMA_DATA_HORA AS DATE) AS DIA FROM TB_PONTO_MARCACAO '
+        "WHERE PMA_PESSOA IS NOT NULL AND (PMA_TIPO_BATIDA IS NULL OR PMA_TIPO_BATIDA NOT IN ('E', 'S')) AND $validas "
+        'ORDER BY 2');
+    for (final d in dias) {
+      final dia = asDate(d['DIA']);
+      if (dia != null) await recalcularTiposDia(asInt(d['PMA_PESSOA']), dia);
+    }
+  }
+
+  /// Marca cada batida do dia como Entrada (E) ou Saída (S) pela ordem: 1ª entrada, 2ª saída, 3ª entrada...
+  /// Batidas lançadas manualmente mantêm o tipo informado. Se o dia anterior terminou com entrada aberta
+  /// (turno que vira a noite), a primeira batida do dia seguinte, até 14h depois, é a saída.
+  Future<void> recalcularTiposDia(int pessoaId, DateTime dia) async {
+    final d = soData(dia);
+    Future<List<DbRow>> doDia(DateTime x) => query(
+        'SELECT PMA_ID, PMA_DATA_HORA, PMA_ORIGEM, PMA_TIPO_BATIDA FROM TB_PONTO_MARCACAO '
+        'WHERE PMA_PESSOA = ? AND PMA_DATA_HORA BETWEEN ? AND ? AND $validas ORDER BY PMA_DATA_HORA, PMA_ID',
+        [pessoaId, inicioDoDia(x), fimDoDia(x)]);
+    final hoje = await doDia(d);
+    if (hoje.isEmpty) return;
+    var inicio = 0; // 0 = a primeira batida do dia é entrada
+    final ontem = await doDia(d.subtract(const Duration(days: 1)));
+    if (ontem.isNotEmpty && ontem.length.isOdd) {
+      final ult = asDate(ontem.last['PMA_DATA_HORA']), prim = asDate(hoje.first['PMA_DATA_HORA']);
+      if (ult != null && prim != null && prim.difference(ult).inHours < 14) inicio = 1;
+    }
+    for (var i = 0; i < hoje.length; i++) {
+      final r = hoje[i];
+      if (asStr(r['PMA_ORIGEM']).toUpperCase() == 'M') continue;
+      final tipo = (i + inicio).isEven ? 'E' : 'S';
+      if (asStr(r['PMA_TIPO_BATIDA']) != tipo) {
+        await exec('UPDATE TB_PONTO_MARCACAO SET PMA_TIPO_BATIDA = ? WHERE PMA_ID = ?', [tipo, r['PMA_ID']]);
+      }
     }
   }
 
@@ -848,20 +891,35 @@ class Db {
   }
 
   /// Portaria 671: a batida não é apagada; fica desconsiderada, com motivo e data.
-  Future<bool> desconsiderarMarcacao(int id, String motivo) async =>
-      await exec(
-          "UPDATE TB_PONTO_MARCACAO SET PMA_DESCONSIDERADA = 'S', PMA_MOTIVO_DESCONSIDERACAO = ?, "
-          'PMA_DATA_DESCONSIDERACAO = CURRENT_TIMESTAMP, PMA_USUARIO_ALTERACAO = ? WHERE PMA_ID = ?',
-          [_limite(motivo), usuarioLogado, id]) >
-      0;
+  Future<bool> desconsiderarMarcacao(int id, String motivo) async {
+    final ok = await exec(
+            "UPDATE TB_PONTO_MARCACAO SET PMA_DESCONSIDERADA = 'S', PMA_MOTIVO_DESCONSIDERACAO = ?, "
+            'PMA_DATA_DESCONSIDERACAO = CURRENT_TIMESTAMP, PMA_USUARIO_ALTERACAO = ? WHERE PMA_ID = ?',
+            [_limite(motivo), usuarioLogado, id]) >
+        0;
+    if (ok) await _recalcularDaMarcacao(id);
+    return ok;
+  }
+
+  Future<void> _recalcularDaMarcacao(int id) async {
+    final m = await queryOne('SELECT PMA_PESSOA, PMA_DATA_HORA FROM TB_PONTO_MARCACAO WHERE PMA_ID = ?', [id]);
+    final p = asInt(m?['PMA_PESSOA']), d = asDate(m?['PMA_DATA_HORA']);
+    if (p > 0 && d != null) {
+      await recalcularTiposDia(p, d);
+      await recalcularTiposDia(p, d.add(const Duration(days: 1))); // pode mudar o início do dia seguinte
+    }
+  }
 
   /// Volta a considerar uma batida desconsiderada por engano.
-  Future<bool> restaurarMarcacao(int id) async =>
-      await exec(
-          "UPDATE TB_PONTO_MARCACAO SET PMA_DESCONSIDERADA = 'N', PMA_MOTIVO_DESCONSIDERACAO = NULL, "
-          'PMA_DATA_DESCONSIDERACAO = NULL, PMA_USUARIO_ALTERACAO = ? WHERE PMA_ID = ?',
-          [usuarioLogado, id]) >
-      0;
+  Future<bool> restaurarMarcacao(int id) async {
+    final ok = await exec(
+            "UPDATE TB_PONTO_MARCACAO SET PMA_DESCONSIDERADA = 'N', PMA_MOTIVO_DESCONSIDERACAO = NULL, "
+            'PMA_DATA_DESCONSIDERACAO = NULL, PMA_USUARIO_ALTERACAO = ? WHERE PMA_ID = ?',
+            [usuarioLogado, id]) >
+        0;
+    if (ok) await _recalcularDaMarcacao(id);
+    return ok;
+  }
 
   /// Correção conforme a Portaria 671: a original fica desconsiderada e uma nova batida
   /// (origem "M" - incluída) é gravada com o motivo e o vínculo com a original. Retorna o novo ID.
@@ -875,6 +933,7 @@ class Db {
         [o['PMA_PESSOA'], o['PMA_RELOGIO'], dataHora, tipo.trim().toUpperCase(), _limite(motivo), id, usuarioLogado]);
     final novo = asInt(r?['PMA_ID']);
     if (novo > 0) await desconsiderarMarcacao(id, 'Corrigida pela batida #$novo: ${motivo.trim()}');
+    if (novo > 0) await _recalcularDaMarcacao(novo);
     return novo;
   }
 
@@ -889,7 +948,9 @@ class Db {
           pessoaId, relogioId > 0 ? relogioId : null, dataHora, tipo.trim().toUpperCase(),
           m.length > 250 ? m.substring(0, 250) : m, usuarioLogado
         ]);
-    return asInt(r?['PMA_ID']);
+    final novoId = asInt(r?['PMA_ID']);
+    if (novoId > 0) await _recalcularDaMarcacao(novoId);
+    return novoId;
   }
 
   // ======================= Dashboard =======================
@@ -1001,6 +1062,7 @@ class Db {
 
   Future<String> verificarEAtualizarEstruturaBanco() async {
     await _garantirTabelasBase();
+    final versaoAntes = await obterVersaoBanco();
     // 1. Tabela de controle de versão
     if (!await tabelaExiste('TB_PONTO_VERSAO_BD')) {
       await execDdl('CREATE TABLE TB_PONTO_VERSAO_BD (VER_ID INTEGER NOT NULL PRIMARY KEY, '
@@ -1212,7 +1274,9 @@ class Db {
     await _sincronizarRegistroVersao(versaoRegrasClt);
     await _sincronizarRegistroVersao(versaoContratos);
     await _sincronizarRegistroVersao(versaoFeriados);
-    return 'Base de dados atualizada com sucesso para a versão de schema ${versaoFeriados.numero}.';
+    await _sincronizarRegistroVersao(versaoTipoBatida);
+    if (versaoAntes < versaoTipoBatida.numero) await _recalcularTiposPendentes();
+    return 'Base de dados atualizada com sucesso para a versão de schema ${versaoTipoBatida.numero}.';
   }
 
   Future<void> _sincronizarRegistroVersao(VersaoBdDef v) async {

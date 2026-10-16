@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/util.dart';
 import '../../data/database.dart';
 import '../app_state.dart';
+import '../importar_afd_dialog.dart';
 import '../descoberta_dialog.dart';
 import '../widgets.dart';
 
@@ -134,6 +135,7 @@ class _RelogiosPageState extends State<RelogiosPage> {
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       PageHeader('Relógios de Ponto', Icons.access_time, acoes: [
         Btn('Procurar na rede', Icons.wifi_find_rounded, _procurarNaRede),
+        Btn('Importar AFD (pendrive)', Icons.usb_rounded, () => importarAfdDoPendrive(context), tonal: true),
         Btn('Novo', Icons.add, _limpar, tonal: true),
         Btn('Atualizar', Icons.refresh, _carregar, tonal: true),
       ]),

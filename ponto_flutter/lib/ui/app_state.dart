@@ -148,6 +148,14 @@ class AppState extends ChangeNotifier {
 
   // ---------------- Coleta automática ----------------
 
+  /// Liga/desliga a coleta automática e lembra a escolha para as próximas aberturas.
+  void alternarAutoColeta() {
+    final ligar = !autoColetaAtiva;
+    AppConfig.instance.controlId.autoIniciarColeta = ligar;
+    AppConfig.instance.save();
+    ligar ? iniciarAutoColeta() : pararAutoColeta();
+  }
+
   void iniciarAutoColeta() {
     pararAutoColeta(silencioso: true);
     var seg = AppConfig.instance.controlId.intervaloColetaSegundos;

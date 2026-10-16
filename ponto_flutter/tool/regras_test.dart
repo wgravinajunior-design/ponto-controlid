@@ -8,6 +8,7 @@ import 'package:path/path.dart' as p;
 import 'package:ponto_flutter/core/config.dart';
 import 'package:ponto_flutter/core/util.dart';
 import 'package:ponto_flutter/data/database.dart';
+import 'package:ponto_flutter/services/afd_import_service.dart';
 import 'package:ponto_flutter/services/assinatura_service.dart';
 import 'package:ponto_flutter/services/banco_horas_service.dart';
 import 'package:ponto_flutter/services/backup_service.dart';
@@ -267,6 +268,61 @@ Future<void> main(List<String> args) async {
   check(rs.ok && File(restaurada).existsSync(), '21b. backup restaurado em uma nova base');
   if (File(restaurada).existsSync()) File(restaurada).deleteSync();
   Directory(cfg.backup.pasta).deleteSync(recursive: true);
+
+  // ---------- 22. Entrada/Saída identificadas ----------
+  final es = await colab('Entrada Saida', h8);
+  for (final h in [d(22, 8), d(22, 12), d(22, 13), d(22, 17)]) {
+    await db.gravarMarcacao(es, 0, h, 7, h.millisecondsSinceEpoch ~/ 1000, 'C', 0, '', '', 'Batida Ponto', 'Control iD API');
+  }
+  Future<String> tipos(int pid, int dia) async => (await db.getMarcacoes(d(dia), d(dia), pessoaId: pid))
+      .reversed
+      .map((x) => asStr(x['PMA_TIPO_BATIDA']))
+      .join();
+  check(await tipos(es, 22) == 'ESES', '22a. coleta grava Entrada/Saída em sequência (ESES)');
+  final mm = (await db.getMarcacoes(d(22), d(22), pessoaId: es)).firstWhere((x) => fmtHora(asDate(x['PMA_DATA_HORA'])) == '12:00');
+  await db.desconsiderarMarcacao(asInt(mm['PMA_ID']), 'Batida em duplicidade');
+  check(await tipos(es, 22) == 'ESE', '22b. desconsiderar refaz a sequência (ESE)');
+  await db.restaurarMarcacao(asInt(mm['PMA_ID']));
+  check(await tipos(es, 22) == 'ESES', '22c. restaurar volta a ESES');
+  // turno da noite: entrada às 22h do dia 23, saída às 06h do dia 24
+  final nt = await colab('Turno noite', h8);
+  await db.gravarMarcacao(nt, 0, d(23, 22), 7, 9001, 'C', 0, '', '', 'Batida Ponto', 'x');
+  await db.gravarMarcacao(nt, 0, d(24, 6), 7, 9002, 'C', 0, '', '', 'Batida Ponto', 'x');
+  check(await tipos(nt, 23) == 'E' && await tipos(nt, 24) == 'S', '22d. turno que vira a noite: 22h entrada, 06h saída');
+
+  // ---------- 23. Importação de AFD do pendrive ----------
+  final cpfAfd = '06169453613';
+  final imp = await colab('Walter AFD', h8);
+  await db.exec('UPDATE TB_COLABORADOR SET COL_CPF = ? WHERE COL_PESSOA = ?', [cpfAfd, imp]);
+  final relAfd = await db.salvarRelogio(0, 'Relógio AFD', '10.0.0.9', 443, true, 'admin', 'admin', 'IDCLASS', 'AFD_671', true);
+  await db.exec("UPDATE TB_PONTO_RELOGIO SET PRE_SERIAL = '00014003750324430' WHERE PRE_ID = ?", [relAfd]);
+  final dirAfd = Directory(p.join(args[1], 'pendrive'))..createSync(recursive: true);
+  // Conteúdo no formato real do REP iDClass (Portaria 671): cabeçalho, inclusão do empregado e marcações
+  final arqAfd = File(p.join(dirAfd.path, 'AFD0001400375032443023644291000156REP_C.txt'))
+    ..writeAsStringSync([
+      '0000000011234567890123456789',
+      '00000000162026-10-16T14:14:00-030002',
+      '00000001032026-10-19T08:01:00-0300006169453613ABCD',
+      '00000001132026-10-19T12:02:00-0300006169453613ABCD',
+      '00000001232026-10-19T13:00:00-0300006169453613ABCD',
+      '00000001332026-10-19T17:05:00-0300006169453613ABCD',
+      '00000001432026-10-19T17:06:00-0300009999999999ZZZZ',
+    ].join('\r\n'));
+  final afdInfo = ArquivoAfd(arqAfd.path);
+  check(afdInfo.serial == '00014003750324430' && await AfdImportService.relogioDoArquivo(afdInfo) == relAfd,
+      '23a. relógio reconhecido pelo número de série no nome do arquivo');
+  final r1 = await AfdImportService.importar(arqAfd.path, relAfd);
+  check(r1.erro == null && r1.lidas == 5 && r1.novas == 5 && r1.semColaborador == 1, '23b. 5 marcações importadas, 1 sem colaborador (${r1.erro})');
+  final tAfd = (await db.getMarcacoes(DateTime(2026, 10, 19), DateTime(2026, 10, 19), pessoaId: imp)).reversed.map((x) => asStr(x['PMA_TIPO_BATIDA'])).join();
+  check(tAfd == 'ESES', '23c. AFD importado já classifica Entrada/Saída ($tAfd)');
+  final r2 = await AfdImportService.importar(arqAfd.path, relAfd);
+  check(r2.novas == 0 && r2.duplicadas == 5, '23d. importar o mesmo arquivo de novo não duplica');
+  check(asInt((await db.getRelogioPorId(relAfd))?['PRE_ULTIMO_LOG_ID']) == 14, '23e. coleta pela rede continua depois do último NSR (14)');
+  final novoColab = await colab('Outro AFD', h8);
+  await db.exec('UPDATE TB_COLABORADOR SET COL_CPF = ? WHERE COL_PESSOA = ?', ['09999999999', novoColab]);
+  final r3 = await AfdImportService.importar(arqAfd.path, relAfd);
+  check(r3.vinculadas == 1 && r3.novas == 0, '23f. colaborador cadastrado depois: marcação antiga é vinculada na reimportação');
+  dirAfd.deleteSync(recursive: true);
 
   // ---------- 12. Assinatura eletrônica ----------
   final dir = Directory(p.join(args[1], 'assin'))..createSync(recursive: true);
