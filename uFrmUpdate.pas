@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
   System.SysUtils, System.Variants, System.Classes, System.UITypes, System.DateUtils,
   System.Generics.Collections, System.RegularExpressions,
-  System.JSON, System.Net.HttpClient, System.Net.HttpClientComponent,
+  System.JSON, System.Net.HttpClient, System.Net.HttpClientComponent, System.IOUtils, System.Zip,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls,
   Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg,
   uConfig, uSkiaButtons;
@@ -59,6 +59,8 @@ type
   public
     class function ChecarAtualizacao(out AInfo: TUpdateInfo): Boolean; static;
     class function CompararVersoes(const V1, V2: string): Integer; static;
+    // Baixa o asset Instaladores.zip (driver/SDK do Hamster DX) da última release e extrai em ADestino
+    class function BaixarPacoteInstaladores(const ADestino: string; out AErro: string): Boolean; static;
     class procedure ExecutarAtualizacao(AOwner: TComponent; const AInfo: TUpdateInfo;
       AAutomatico: Boolean = False); static;
     property UpdateInfo: TUpdateInfo read FUpdateInfo write SetUpdateInfo;
@@ -142,6 +144,70 @@ begin
     Result := Format('%.0f KB', [ABytes / 1024.0])
   else
     Result := Format('%d B', [ABytes]);
+end;
+
+class function TfrmUpdate.BaixarPacoteInstaladores(const ADestino: string; out AErro: string): Boolean;
+const
+  NOME_PACOTE = 'Instaladores.zip';
+var
+  Client: THTTPClient;
+  Resp: IHTTPResponse;
+  JSONVal, AssetVal: TJSONValue;
+  Url, ZipPath: string;
+  Arquivo: TFileStream;
+begin
+  Result := False;
+  AErro := '';
+  Url := '';
+  Client := THTTPClient.Create;
+  try
+    Client.UserAgent := 'PontoControlID-Updater';
+    try
+      Resp := Client.Get(Format('https://api.github.com/repos/%s/%s/releases/latest',
+        [GITHUB_OWNER, GITHUB_REPO]));
+      if Resp.StatusCode <> 200 then
+      begin
+        AErro := Format('GitHub respondeu HTTP %d.', [Resp.StatusCode]);
+        Exit;
+      end;
+      JSONVal := TJSONObject.ParseJSONValue(Resp.ContentAsString(TEncoding.UTF8));
+      try
+        if (JSONVal is TJSONObject) and ((JSONVal as TJSONObject).GetValue('assets') is TJSONArray) then
+          for AssetVal in (JSONVal as TJSONObject).GetValue('assets') as TJSONArray do
+            if SameText(AssetVal.GetValue<string>('name', ''), NOME_PACOTE) then
+              Url := AssetVal.GetValue<string>('browser_download_url', '');
+      finally
+        JSONVal.Free;
+      end;
+      if Url = '' then
+      begin
+        AErro := 'A última versão publicada não tem o pacote ' + NOME_PACOTE + '.';
+        Exit;
+      end;
+
+      ZipPath := TPath.Combine(TPath.GetTempPath, NOME_PACOTE);
+      Arquivo := TFileStream.Create(ZipPath, fmCreate);
+      try
+        Resp := Client.Get(Url, Arquivo);
+      finally
+        Arquivo.Free;
+      end;
+      if Resp.StatusCode <> 200 then
+      begin
+        AErro := Format('Falha ao baixar %s (HTTP %d).', [NOME_PACOTE, Resp.StatusCode]);
+        Exit;
+      end;
+
+      TZipFile.ExtractZipFile(ZipPath, ADestino);
+      DeleteFile(ZipPath);
+      Result := True;
+    except
+      on E: Exception do
+        AErro := E.Message;
+    end;
+  finally
+    Client.Free;
+  end;
 end;
 
 class function TfrmUpdate.ChecarAtualizacao(out AInfo: TUpdateInfo): Boolean;

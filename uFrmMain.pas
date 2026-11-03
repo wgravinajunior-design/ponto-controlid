@@ -6,9 +6,11 @@ uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI, System.SysUtils, System.Variants,
   System.Classes, System.DateUtils, System.UITypes, System.Types, System.IOUtils, System.Math,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Grids,
-  Vcl.DBGrids, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param,
+  Vcl.DBGrids, Vcl.Clipbrd, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param,
   uConfig, uControlIDClient, uDataModule, uPontoService, uPontoCalculoService, uSkiaButtons,
-  uFrmUpdate;
+  uFrmUpdate, uBiometriaHamster, uFrmTerminalPonto, uRelatorioPonto,
+  FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Error, FireDAC.DatS,
+  FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Comp.DataSet;
 
 type
   TfrmMain = class(TForm)
@@ -401,6 +403,50 @@ type
     FTelaAtualizacaoAberta: Boolean;
     FUltimaAtualizacaoOferecida: string;
 
+    // Configuração do relógio / leitor (aba criada em tempo de execução)
+    tabCfgRelogio: TTabSheet;
+    grpCfgRelogio: TGroupBox;
+    cmbCfgTipoRelogio: TComboBox;
+    lblCfgTipoInfo: TLabel;
+    grpCfgHamster: TGroupBox;
+    cmbCfgNivelSeguranca: TComboBox;
+    edtCfgIntervaloBatida: TEdit;
+    chkCfgAbrirTerminal: TCheckBox;
+    skCfgTestarLeitor: TSkModernButton;
+    skCfgSalvarRelogio: TSkModernButton;
+    lblCfgHamsterReq: TLabel;
+    skCfgInstalarHamster: TSkModernButton;
+
+    // Biometria no cadastro do colaborador
+    grpBiometria: TGroupBox;
+    lblBioStatus: TLabel;
+    lblBioData: TLabel;
+    skCadastrarBio: TSkModernButton;
+    skTestarBio: TSkModernButton;
+    skRemoverBio: TSkModernButton;
+    FColabBioCadastrada: Boolean;
+
+    // Relatório padrão de Entradas e Saídas
+    skRelatorioES: TSkModernButton;
+
+    procedure CriarControlesIntegracao;
+    procedure AplicarModoRelogio;
+    procedure AtualizarInfoBiometria(AQry: TDataSet);
+    procedure AtualizarTextoTipoRelogio;
+    procedure cmbCfgTipoRelogioChange(Sender: TObject);
+    procedure skCfgTestarLeitorClick(Sender: TObject);
+    procedure skCfgInstalarHamsterClick(Sender: TObject);
+    function RequisitosHamsterOk: Boolean;
+    procedure AtualizarStatusRequisitosHamster;
+    function ExecutarInstaladorComoAdmin(const AArquivo, AParametros: string): Boolean;
+    procedure skCadastrarBioClick(Sender: TObject);
+    procedure skTestarBioClick(Sender: TObject);
+    procedure skRemoverBioClick(Sender: TObject);
+    procedure skRelatorioESClick(Sender: TObject);
+    procedure AbrirTerminalBiometrico;
+    procedure TerminalBatidaRegistrada;
+    function LeitorLivreParaUso: Boolean;
+
     procedure ChecarAtualizacaoSistemaAsync;
     procedure TmrChecarAtualizacaoTimer(Sender: TObject);
     procedure AbrirTelaAtualizacao(AAutomatico: Boolean);
@@ -585,6 +631,7 @@ begin
   grdEspelho.ColWidths[12] := 450;
 
   CriarBotoesSkia;
+  CriarControlesIntegracao;
   LimparFormColaborador;
   LimparFormHorario;
   ConfigurarGridRelogios;
@@ -593,6 +640,7 @@ begin
   ConfigurarGridHorarios;
 
   CarregarConfigNaTela;
+  AplicarModoRelogio;
 end;
 
 procedure TfrmMain.FormShow(Sender: TObject);
@@ -657,10 +705,16 @@ begin
       pgcMain.ActivePage := tabHorarios
     else if FindCmdLineSwitch('tab_esp') then
       pgcMain.ActivePage := tabEspelho
-    else if FindCmdLineSwitch('tab_rel') then
+    else if FindCmdLineSwitch('tab_rel') and not ModoHamsterDX then
       pgcMain.ActivePage := tabRelogios;
 
-    if AppConfig.ControlID.AutoIniciarColeta then
+    if ModoHamsterDX then
+    begin
+      AtualizarStatusColeta('👆 Leitor Biométrico Hamster DX', True);
+      if AppConfig.Relogio.AbrirTerminalAoIniciar then
+        AbrirTerminalBiometrico;
+    end
+    else if AppConfig.ControlID.AutoIniciarColeta then
     begin
       tmrAutoColeta.Interval := AppConfig.ControlID.IntervaloColetaSegundos * 1000;
       tmrAutoColeta.Enabled := True;
@@ -760,13 +814,28 @@ begin
   edtIntervalo.Text := IntToStr(AppConfig.ControlID.IntervaloColetaSegundos);
   chkAutoIniciar.Checked := AppConfig.ControlID.AutoIniciarColeta;
   chkAutoAtualizar.Checked := AppConfig.Atualizacao.AutoAtualizar;
+
+  if Assigned(cmbCfgTipoRelogio) then
+  begin
+    cmbCfgTipoRelogio.ItemIndex := Ord(AppConfig.Relogio.Tipo);
+    cmbCfgNivelSeguranca.ItemIndex := AppConfig.Relogio.NivelSeguranca - 1;
+    edtCfgIntervaloBatida.Text := IntToStr(AppConfig.Relogio.IntervaloMinimoBatidaMin);
+    chkCfgAbrirTerminal.Checked := AppConfig.Relogio.AbrirTerminalAoIniciar;
+    AtualizarTextoTipoRelogio;
+    AtualizarStatusRequisitosHamster;
+  end;
 end;
 
 procedure TfrmMain.AtualizarDashboard;
 var
   TotalRel, TotalMarc, TotalColab: Integer;
 begin
-  if dmDados.GetTotalRelogiosAtivos(TotalRel) then
+  if ModoHamsterDX then
+  begin
+    if dmDados.GetTotalBiometrias(TotalRel) then
+      lblCard1Val.Caption := IntToStr(TotalRel);
+  end
+  else if dmDados.GetTotalRelogiosAtivos(TotalRel) then
     lblCard1Val.Caption := IntToStr(TotalRel);
 
   if dmDados.GetTotalMarcacoesHoje(TotalMarc) then
@@ -936,6 +1005,12 @@ procedure TfrmMain.btnQuickTestClick(Sender: TObject);
 var
   RelId: Integer;
 begin
+  if ModoHamsterDX then
+  begin
+    skCfgTestarLeitorClick(Sender);
+    Exit;
+  end;
+
   RelId := ObterRelogioAtivoId;
   if RelId <= 0 then
   begin
@@ -976,6 +1051,12 @@ procedure TfrmMain.btnQuickCollectClick(Sender: TObject);
 var
   TotalNovas: Integer;
 begin
+  if ModoHamsterDX then
+  begin
+    AbrirTerminalBiometrico;
+    Exit;
+  end;
+
   Screen.Cursor := crHourGlass;
   try
     LogMessage('📥 Iniciando verificação de novas batidas de ponto em todos os relógios ativos...');
@@ -1021,6 +1102,8 @@ var
   TotalNovas: Integer;
 begin
   tmrAutoColeta.Enabled := False;
+  if ModoHamsterDX then
+    Exit;
   try
     FPontoService.ColetarTodosRelogios(TotalNovas);
     lblCard4Val.Caption := FormatDateTime('hh:nn:ss', Now);
@@ -1374,6 +1457,7 @@ begin
   lblColabUltimaSync.Caption := 'Nunca enviado';
   if (cmbColabRelogioDestino.Items.Count > 0) and (cmbColabRelogioDestino.ItemIndex < 0) then
     cmbColabRelogioDestino.ItemIndex := 0;
+  AtualizarInfoBiometria(nil);
 end;
 
 procedure TfrmMain.PreencherFormColaborador(AQry: TDataSet);
@@ -1457,6 +1541,8 @@ begin
     lblColabUltimaSync.Caption := FormatDateTime('dd/mm/yyyy hh:nn:ss', AQry.FieldByName('COL_ULTIMA_SINCRONIZACAO').AsDateTime)
   else
     lblColabUltimaSync.Caption := 'Nunca enviado';
+
+  AtualizarInfoBiometria(AQry);
 end;
 
 procedure TfrmMain.CarregarRelogiosNoComboDestino;
@@ -2461,6 +2547,8 @@ var
   CfgFB: TFirebirdConfig;
   CfgCtl: TControlIDDefaultConfig;
   CfgAtu: TAtualizacaoConfig;
+  CfgRel: TRelogioConfig;
+  TipoAnterior: TTipoRelogio;
 begin
   CfgFB.Server := Trim(edtCfgServer.Text);
   CfgFB.Port := StrToIntDef(edtCfgPorta.Text, 3060);
@@ -2480,7 +2568,32 @@ begin
   AppConfig.Firebird := CfgFB;
   AppConfig.ControlID := CfgCtl;
   AppConfig.Atualizacao := CfgAtu;
+
+  TipoAnterior := AppConfig.Relogio.Tipo;
+  CfgRel := AppConfig.Relogio;
+  if cmbCfgTipoRelogio.ItemIndex = Ord(trHamsterDX) then
+    CfgRel.Tipo := trHamsterDX
+  else
+    CfgRel.Tipo := trControlID;
+  CfgRel.NivelSeguranca := cmbCfgNivelSeguranca.ItemIndex + 1;
+  CfgRel.IntervaloMinimoBatidaMin := StrToIntDef(Trim(edtCfgIntervaloBatida.Text), 2);
+  if CfgRel.IntervaloMinimoBatidaMin < 0 then
+    CfgRel.IntervaloMinimoBatidaMin := 0;
+  CfgRel.AbrirTerminalAoIniciar := chkCfgAbrirTerminal.Checked;
+  AppConfig.Relogio := CfgRel;
+
   AppConfig.Save;
+
+  if TipoAnterior <> CfgRel.Tipo then
+  begin
+    LogMessage('🔀 Integração de ponto alterada para: ' + TipoRelogioDescricao(CfgRel.Tipo));
+    AplicarModoRelogio;
+    if dmDados.IsConectado then
+    begin
+      CarregarColaboradores;
+      AtualizarDashboard;
+    end;
+  end;
 
   LogMessage('💾 Configurações do sistema salvas com sucesso no arquivo Config.ini.');
   ShowMessage('Configurações salvas com sucesso!');
@@ -3408,6 +3521,10 @@ var
   Texto: string;
   TxtRect: TRect;
 begin
+  // Desenho 100% próprio (DefaultDrawing = False): pincel sólido para apagar a célula antes do texto
+  grdEspelho.Canvas.Brush.Style := bsSolid;
+  SetBkMode(grdEspelho.Canvas.Handle, TRANSPARENT);
+
   if (ARow = 0) then
   begin
     grdEspelho.Canvas.Brush.Color := $009A572B; // #2B579A Azul Corporativo
@@ -3466,6 +3583,12 @@ begin
       grdEspelho.Canvas.Font.Color := $000677D9;
       grdEspelho.Canvas.Font.Style := [fsBold];
     end;
+  end
+  else
+  begin
+    grdEspelho.Canvas.Brush.Color := $00FAE8D6; // azul claro de seleção
+    grdEspelho.Canvas.Font.Color := clBlack;
+    grdEspelho.Canvas.Font.Style := [fsBold];
   end;
 
   grdEspelho.Canvas.FillRect(Rect);
@@ -3689,6 +3812,760 @@ end;
 procedure TfrmMain.FormResize(Sender: TObject);
 begin
   ArredondarControles;
+
+  // Evita que o total de marcações fique por cima do botão de relatório em telas estreitas
+  if Assigned(skRelatorioES) then
+  begin
+    if lblTotalMarcacoesGrid.Left < skRelatorioES.Left + skRelatorioES.Width + 10 then
+      lblTotalMarcacoesGrid.Top := 1
+    else
+      lblTotalMarcacoesGrid.Top := 26;
+  end;
+end;
+
+// =============================================================================
+// INTEGRAÇÕES DE RELÓGIO (Control iD / Leitor Biométrico Hamster DX)
+// =============================================================================
+
+procedure TfrmMain.CriarControlesIntegracao;
+
+  function NovoLabel(AParent: TWinControl; X, Y: Integer; const ACaption: string): TLabel;
+  begin
+    Result := TLabel.Create(Self);
+    Result.Parent := AParent;
+    Result.SetBounds(X, Y, 300, 15);
+    Result.Font.Style := [];
+    Result.Caption := ACaption;
+  end;
+
+  function NovoBtn(AParent: TWinControl; X, Y, W, H: Integer; const ACaption: string;
+    AKind: TSkButtonKind; AOnClick: TNotifyEvent): TSkModernButton;
+  begin
+    Result := TSkModernButton.Create(Self);
+    Result.Parent := AParent;
+    Result.SetBounds(X, Y, W, H);
+    Result.Caption := ACaption;
+    Result.Kind := AKind;
+    Result.Radius := 8;
+    Result.FontSize := 11;
+    Result.EmojiSize := 16;
+    Result.OnClick := AOnClick;
+  end;
+
+  function NovoGrupo(AParent: TWinControl; X, Y, W, H: Integer; const ACaption: string): TGroupBox;
+  begin
+    Result := TGroupBox.Create(Self);
+    Result.Parent := AParent;
+    Result.SetBounds(X, Y, W, H);
+    Result.Caption := ACaption;
+    Result.Font.Name := 'Segoe UI';
+    Result.Font.Height := -12;
+    Result.Font.Style := [fsBold];
+  end;
+
+var
+  I: Integer;
+  Lbl: TLabel;
+begin
+  // ===== Configurações > Relógio de Ponto =====
+  tabCfgRelogio := TTabSheet.Create(Self);
+  tabCfgRelogio.PageControl := pgcConfig;
+  tabCfgRelogio.Caption := '  Relógio de Ponto  ';
+  tabCfgRelogio.PageIndex := 1;
+
+  grpCfgRelogio := NovoGrupo(tabCfgRelogio, 30, 20, 600, 160, ' Integração de Relógio de Ponto ');
+  NovoLabel(grpCfgRelogio, 20, 32, 'Relógio / leitor utilizado nesta instalação:');
+  cmbCfgTipoRelogio := TComboBox.Create(Self);
+  cmbCfgTipoRelogio.Parent := grpCfgRelogio;
+  cmbCfgTipoRelogio.Style := csDropDownList;
+  cmbCfgTipoRelogio.Font.Style := [];
+  cmbCfgTipoRelogio.SetBounds(20, 52, 560, 23);
+  cmbCfgTipoRelogio.Items.Add(TipoRelogioDescricao(trControlID));
+  cmbCfgTipoRelogio.Items.Add(TipoRelogioDescricao(trHamsterDX));
+  cmbCfgTipoRelogio.ItemIndex := 0;
+  cmbCfgTipoRelogio.OnChange := cmbCfgTipoRelogioChange;
+
+  lblCfgTipoInfo := NovoLabel(grpCfgRelogio, 20, 86, '');
+  lblCfgTipoInfo.AutoSize := False;
+  lblCfgTipoInfo.WordWrap := True;
+  lblCfgTipoInfo.SetBounds(20, 86, 560, 64);
+  lblCfgTipoInfo.Font.Color := clGray;
+
+  grpCfgHamster := NovoGrupo(tabCfgRelogio, 30, 195, 600, 260, ' Leitor Biométrico Hamster DX (Nitgen) ');
+  NovoLabel(grpCfgHamster, 20, 32, 'Nível de segurança da identificação:');
+  cmbCfgNivelSeguranca := TComboBox.Create(Self);
+  cmbCfgNivelSeguranca.Parent := grpCfgHamster;
+  cmbCfgNivelSeguranca.Style := csDropDownList;
+  cmbCfgNivelSeguranca.Font.Style := [];
+  cmbCfgNivelSeguranca.SetBounds(20, 52, 260, 23);
+  for I := 1 to 9 do
+  begin
+    case I of
+      1: cmbCfgNivelSeguranca.Items.Add('1 - Mais tolerante');
+      5: cmbCfgNivelSeguranca.Items.Add('5 - Padrão (recomendado)');
+      9: cmbCfgNivelSeguranca.Items.Add('9 - Mais rigoroso');
+    else
+      cmbCfgNivelSeguranca.Items.Add(IntToStr(I));
+    end;
+  end;
+  cmbCfgNivelSeguranca.ItemIndex := 4;
+
+  NovoLabel(grpCfgHamster, 300, 32, 'Intervalo mínimo entre batidas (minutos):');
+  edtCfgIntervaloBatida := TEdit.Create(Self);
+  edtCfgIntervaloBatida.Parent := grpCfgHamster;
+  edtCfgIntervaloBatida.Font.Style := [];
+  edtCfgIntervaloBatida.NumbersOnly := True;
+  edtCfgIntervaloBatida.SetBounds(300, 52, 120, 23);
+
+  chkCfgAbrirTerminal := TCheckBox.Create(Self);
+  chkCfgAbrirTerminal.Parent := grpCfgHamster;
+  chkCfgAbrirTerminal.Font.Style := [];
+  chkCfgAbrirTerminal.SetBounds(20, 90, 560, 19);
+  chkCfgAbrirTerminal.Caption := 'Abrir o Terminal de Ponto automaticamente ao iniciar o sistema';
+
+  lblCfgHamsterReq := NovoLabel(grpCfgHamster, 20, 128, '');
+  lblCfgHamsterReq.AutoSize := False;
+  lblCfgHamsterReq.SetBounds(20, 128, 370, 20);
+  lblCfgHamsterReq.Font.Style := [fsBold];
+  skCfgInstalarHamster := NovoBtn(grpCfgHamster, 400, 118, 180, 36, '🛠️ Instalar Driver e SDK',
+    sbkWarning, skCfgInstalarHamsterClick);
+  skCfgInstalarHamster.Visible := False;
+
+  Lbl := NovoLabel(grpCfgHamster, 20, 168, '');
+  Lbl.AutoSize := False;
+  Lbl.WordWrap := True;
+  Lbl.SetBounds(20, 168, 560, 80);
+  Lbl.Font.Color := clGray;
+  Lbl.Caption :=
+    'Requisitos: driver do Hamster DX e SDK Nitgen eNBSP (NBioBSP) instalados neste computador. ' +
+    'O leitor é usado somente para leitura: cadastre a digital de cada colaborador na aba Colaboradores ' +
+    'e registre Entrada/Saída pelo botão "Terminal de Ponto". O intervalo mínimo evita batidas duplicadas ' +
+    'quando o colaborador encosta o dedo duas vezes seguidas.';
+
+  skCfgSalvarRelogio := NovoBtn(tabCfgRelogio, 30, 475, 210, 44, '💾 Salvar Configurações', sbkSuccess, btnSalvarConfigClick);
+  skCfgSalvarRelogio.Radius := 10;
+  skCfgSalvarRelogio.EmojiSize := 17;
+  skCfgTestarLeitor := NovoBtn(tabCfgRelogio, 255, 475, 210, 44, '⚡ Testar Leitor Hamster', sbkPrimary, skCfgTestarLeitorClick);
+  skCfgTestarLeitor.Radius := 10;
+  skCfgTestarLeitor.EmojiSize := 17;
+
+  // ===== Colaboradores > Biometria (mesma posição do grupo de sincronização Control iD) =====
+  grpBiometria := TGroupBox.Create(Self);
+  grpBiometria.Parent := grpInfoSinc.Parent;
+  grpBiometria.BoundsRect := grpInfoSinc.BoundsRect;
+  grpBiometria.Caption := ' Biometria (Leitor Hamster DX) ';
+  grpBiometria.Visible := False;
+
+  lblBioStatus := NovoLabel(grpBiometria, 15, 22, '');
+  lblBioStatus.Font.Style := [fsBold];
+  lblBioData := NovoLabel(grpBiometria, 15, 44, '');
+  lblBioData.AutoSize := False;
+  lblBioData.Width := grpBiometria.ClientWidth - 30;
+  lblBioData.Font.Color := clGray;
+
+  skCadastrarBio := NovoBtn(grpBiometria, 15, 72, 150, 38, '👆 Cadastrar Digital', sbkSuccess, skCadastrarBioClick);
+  skTestarBio := NovoBtn(grpBiometria, 173, 72, 125, 38, '🧪 Testar', sbkPrimary, skTestarBioClick);
+  skRemoverBio := NovoBtn(grpBiometria, 306, 72, 124, 38, '🗑️ Remover', sbkDanger, skRemoverBioClick);
+
+  // ===== Marcações > Relatório padrão de Entradas e Saídas =====
+  skRelatorioES := NovoBtn(pnlMarcacoesFiltro, 1205, 16, 160, 38, '📋 Relatório E/S', sbkTeal, skRelatorioESClick);
+  skRelatorioES.Hint := 'Relatório de Entradas e Saídas de todos os colaboradores no período filtrado';
+  skRelatorioES.ShowHint := True;
+end;
+
+procedure TfrmMain.AtualizarTextoTipoRelogio;
+begin
+  if not Assigned(lblCfgTipoInfo) then
+    Exit;
+  if cmbCfgTipoRelogio.ItemIndex = Ord(trHamsterDX) then
+    lblCfgTipoInfo.Caption :=
+      'Leitor biométrico USB conectado a este computador, usado apenas para marcar Entrada e Saída. ' +
+      'Cada colaborador precisa ter a digital cadastrada (aba Colaboradores). As batidas são gravadas ' +
+      'direto no banco e aparecem em Marcações, Espelho de Ponto e no Relatório de Entradas e Saídas.'
+  else
+    lblCfgTipoInfo.Caption :=
+      'Relógios Control iD (iDClass, iDFace, iDAccess...) conectados na rede. As marcações são ' +
+      'coletadas pela API do equipamento e os colaboradores/jornadas são enviados ao relógio.';
+end;
+
+procedure TfrmMain.cmbCfgTipoRelogioChange(Sender: TObject);
+begin
+  AtualizarTextoTipoRelogio;
+  AtualizarStatusRequisitosHamster;
+
+  // Ao escolher o Hamster DX, verifica na hora se driver e SDK estão neste computador
+  if (cmbCfgTipoRelogio.ItemIndex = Ord(trHamsterDX)) and not RequisitosHamsterOk then
+  begin
+    if MessageDlg('O leitor Hamster DX precisa do driver e do SDK Nitgen eNBSP instalados ' +
+      'neste computador, e algum deles não foi encontrado.'#13#10#13#10 +
+      lblCfgHamsterReq.Caption + #13#10#13#10 +
+      'Deseja instalar agora?', mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+      skCfgInstalarHamsterClick(nil);
+  end;
+end;
+
+function TfrmMain.RequisitosHamsterOk: Boolean;
+begin
+  Result := THamsterDX.DriverInstalado and THamsterDX.SdkInstalado;
+end;
+
+procedure TfrmMain.AtualizarStatusRequisitosHamster;
+const
+  STATUS: array[Boolean] of string = ('❌ não instalado', '✅ instalado');
+var
+  Driver, Sdk: Boolean;
+begin
+  if not Assigned(lblCfgHamsterReq) then
+    Exit;
+  Driver := THamsterDX.DriverInstalado;
+  Sdk := THamsterDX.SdkInstalado;
+  lblCfgHamsterReq.Caption := 'Driver: ' + STATUS[Driver] + '     SDK eNBSP: ' + STATUS[Sdk];
+  if Driver and Sdk then
+    lblCfgHamsterReq.Font.Color := clGreen
+  else
+    lblCfgHamsterReq.Font.Color := clMaroon;
+  skCfgInstalarHamster.Visible := not (Driver and Sdk);
+end;
+
+function TfrmMain.ExecutarInstaladorComoAdmin(const AArquivo, AParametros: string): Boolean;
+var
+  Info: TShellExecuteInfo;
+begin
+  // Instaladores de driver/SDK exigem administrador: abre com UAC e aguarda terminar
+  FillChar(Info, SizeOf(Info), 0);
+  Info.cbSize := SizeOf(Info);
+  Info.fMask := SEE_MASK_NOCLOSEPROCESS;
+  Info.Wnd := Handle;
+  Info.lpVerb := 'runas';
+  Info.lpFile := PChar(AArquivo);
+  Info.lpParameters := PChar(AParametros);
+  Info.lpDirectory := PChar(ExtractFileDir(AArquivo));
+  Info.nShow := SW_SHOWNORMAL;
+  Result := ShellExecuteEx(@Info);
+  if not Result then
+  begin
+    LogMessage('⚠️ Instalador não executado (' + SysErrorMessage(GetLastError) + '): ' + AArquivo, True);
+    Exit;
+  end;
+  if Info.hProcess = 0 then
+    Exit;
+  try
+    Screen.Cursor := crHourGlass;
+    while MsgWaitForMultipleObjects(1, Info.hProcess, False, INFINITE, QS_ALLINPUT) = WAIT_OBJECT_0 + 1 do
+      Application.ProcessMessages;
+  finally
+    Screen.Cursor := crDefault;
+    CloseHandle(Info.hProcess);
+  end;
+end;
+
+procedure TfrmMain.skCfgInstalarHamsterClick(Sender: TObject);
+var
+  Extras: TArray<string>;
+  Dlg: TFileOpenDialog;
+  InstDriver, InstSdk, Iss, Params, Serial: string;
+  PrecisaDriver, PrecisaSdk: Boolean;
+begin
+  PrecisaDriver := not THamsterDX.DriverInstalado;
+  PrecisaSdk := not THamsterDX.SdkInstalado;
+  if not (PrecisaDriver or PrecisaSdk) then
+  begin
+    AtualizarStatusRequisitosHamster;
+    MessageDlg('Driver e SDK do Hamster DX já estão instalados neste computador.', mtInformation, [mbOK], 0);
+    Exit;
+  end;
+
+  // Pacote embarcado (Instaladores\driver + Instaladores\sdk): instala sem download nem serial
+  Iss := ExtractFilePath(Application.ExeName) + 'Instaladores\instalar_hamster.bat';
+  if not FileExists(Iss) then
+  begin
+    // Pacote não veio com o sistema: baixa da última release no GitHub
+    LogMessage('⬇️ Baixando pacote de instaladores do Hamster DX (GitHub)...');
+    Screen.Cursor := crHourGlass;
+    try
+      if not TfrmUpdate.BaixarPacoteInstaladores(ExtractFilePath(Application.ExeName), Serial) then
+        LogMessage('⚠️ Não foi possível baixar os instaladores: ' + Serial, True);
+    finally
+      Screen.Cursor := crDefault;
+    end;
+  end;
+  if FileExists(Iss) then
+  begin
+    LogMessage('🛠️ Instalando driver e SDK do Hamster DX pelo pacote embarcado: ' + Iss);
+    ExecutarInstaladorComoAdmin(GetEnvironmentVariable('ComSpec'), '/c "' + Iss + '"');
+    AtualizarStatusRequisitosHamster;
+    if RequisitosHamsterOk then
+    begin
+      LogMessage('✅ Driver e SDK do Hamster DX instalados.');
+      MessageDlg('Driver e SDK do Hamster DX instalados.'#13#10#13#10 +
+        'Desconecte e reconecte o leitor na USB e clique em "Testar Leitor Hamster".', mtInformation, [mbOK], 0);
+      Exit;
+    end;
+    LogMessage('⚠️ Pacote embarcado não concluiu a instalação: ' + lblCfgHamsterReq.Caption, True);
+  end;
+
+  Extras := [];
+  Screen.Cursor := crHourGlass;
+  try
+    if PrecisaDriver then
+      InstDriver := THamsterDX.LocalizarInstaladorDriver(Extras);
+    if PrecisaSdk then
+      InstSdk := THamsterDX.LocalizarInstaladorSdk(Extras);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+
+  // Não achou nas pastas padrão: pede a pasta onde estão os instaladores
+  if (PrecisaDriver and (InstDriver = '')) or (PrecisaSdk and (InstSdk = '')) then
+  begin
+    MessageDlg('Não encontrei os instaladores na pasta "Instaladores" do sistema, na Área de Trabalho ' +
+      'nem em Downloads.'#13#10#13#10 +
+      'Selecione a pasta onde estão o driver (UBio_Hamster_X_Driver_Setup) e/ou o ' +
+      'eNBSP SDK (eNBSP_SDK_v4.85 descompactado).', mtInformation, [mbOK], 0);
+    Dlg := TFileOpenDialog.Create(Self);
+    try
+      Dlg.Title := 'Pasta com os instaladores do Hamster DX';
+      Dlg.Options := [fdoPickFolders, fdoPathMustExist];
+      if not Dlg.Execute then
+        Exit;
+      Extras := [Dlg.FileName];
+    finally
+      Dlg.Free;
+    end;
+    Screen.Cursor := crHourGlass;
+    try
+      if PrecisaDriver and (InstDriver = '') then
+        InstDriver := THamsterDX.LocalizarInstaladorDriver(Extras);
+      if PrecisaSdk and (InstSdk = '') then
+        InstSdk := THamsterDX.LocalizarInstaladorSdk(Extras);
+    finally
+      Screen.Cursor := crDefault;
+    end;
+  end;
+
+  if PrecisaDriver then
+  begin
+    if InstDriver = '' then
+      MessageDlg('Instalador do driver (UBio_Hamster_X_Driver_Setup) não encontrado.', mtWarning, [mbOK], 0)
+    else
+    begin
+      LogMessage('🛠️ Instalando driver do Hamster DX: ' + InstDriver);
+      // Instalação silenciosa se o pacote trouxer o arquivo de respostas do InstallShield
+      Iss := TPath.Combine(ExtractFileDir(InstDriver), 'install_UBio_Hamster_X_Driver.iss');
+      if FileExists(Iss) then
+        Params := '-s -f1"' + Iss + '"'
+      else
+        Params := '';
+      ExecutarInstaladorComoAdmin(InstDriver, Params);
+    end;
+  end;
+
+  if PrecisaSdk then
+  begin
+    if InstSdk = '' then
+      MessageDlg('Instalador do SDK Nitgen eNBSP (Master CD\for 32bit\setup.exe) não encontrado.',
+        mtWarning, [mbOK], 0)
+    else
+    begin
+      Serial := THamsterDX.LerSerialSdk(InstSdk);
+      if Serial <> '' then
+      begin
+        Clipboard.AsText := Serial;
+        MessageDlg('O instalador do SDK Nitgen eNBSP vai abrir agora.'#13#10#13#10 +
+          'Quando ele pedir o número de série, cole (Ctrl+V) o serial abaixo, que já foi copiado:'#13#10#13#10 +
+          Serial + #13#10#13#10 +
+          'Siga as telas com as opções padrão até concluir.', mtInformation, [mbOK], 0);
+      end
+      else
+        MessageDlg('O instalador do SDK Nitgen eNBSP vai abrir agora. Informe o número de série do ' +
+          'seu pacote quando solicitado e siga as telas com as opções padrão.', mtInformation, [mbOK], 0);
+      LogMessage('🛠️ Instalando SDK Nitgen eNBSP: ' + InstSdk);
+      ExecutarInstaladorComoAdmin(InstSdk, '');
+    end;
+  end;
+
+  AtualizarStatusRequisitosHamster;
+  if RequisitosHamsterOk then
+  begin
+    LogMessage('✅ Driver e SDK do Hamster DX instalados.');
+    MessageDlg('Driver e SDK do Hamster DX instalados.'#13#10#13#10 +
+      'Conecte o leitor na USB e clique em "Testar Leitor Hamster".', mtInformation, [mbOK], 0);
+  end
+  else
+    MessageDlg('A instalação não foi concluída.'#13#10#13#10 + lblCfgHamsterReq.Caption,
+      mtWarning, [mbOK], 0);
+end;
+
+procedure TfrmMain.AplicarModoRelogio;
+var
+  Hamster: Boolean;
+begin
+  Hamster := ModoHamsterDX;
+
+  // Relógios Control iD não se aplicam ao leitor USB
+  tabRelogios.TabVisible := not Hamster;
+  if Hamster and (pgcMain.ActivePage = tabRelogios) then
+    pgcMain.ActivePage := tabDashboard;
+
+  // Ações rápidas do topo
+  skQuickSyncTime.Visible := not Hamster;
+  skQuickAuto.Visible := not Hamster;
+  if Hamster then
+  begin
+    if tmrAutoColeta.Enabled then
+    begin
+      tmrAutoColeta.Enabled := False;
+      skQuickAuto.Caption := '🔄 Auto: OFF';
+      skQuickAuto.Kind := sbkDark;
+      btnQuickAuto.Caption := 'Auto: OFF';
+    end;
+    skQuickTest.Caption := '⚡ Testar Leitor';
+    skQuickCollect.Caption := '👆 Terminal de Ponto';
+    skQuickCollect.Left := skQuickSyncTime.Left;
+    lblCard1Title.Caption := 'Digitais Cadastradas';
+    lblCard4Title.Caption := 'Última Batida';
+    AtualizarStatusColeta('👆 Leitor Biométrico Hamster DX', True);
+  end
+  else
+  begin
+    skQuickTest.Caption := '⚡ Testar Conexão';
+    skQuickCollect.Caption := '📥 Coletar Marcações';
+    skQuickCollect.Left := btnQuickCollect.Left;
+    lblCard1Title.Caption := 'Relógios Cadastrados';
+    lblCard4Title.Caption := 'Última Coleta';
+    if not tmrAutoColeta.Enabled then
+      AtualizarStatusColeta('🔄 Coleta: Desativada', False);
+  end;
+
+  // Colaboradores: envio ao relógio x cadastro de digital
+  skEnviarTodosPendentes.Visible := not Hamster;
+  skImportarDoRelogio.Visible := not Hamster;
+  skLimparTodosRelogio.Visible := not Hamster;
+  skSalvarEnviarColab.Visible := not Hamster;
+  skRemoverColabForm.Visible := not Hamster;
+  grpInfoSinc.Visible := not Hamster;
+  grpBiometria.Visible := Hamster;
+  if Hamster then
+  begin
+    skSalvarColab.SetBounds(0, 4, 210, 36);
+    skNovoColab.SetBounds(220, 4, 205, 36);
+    skExcluirColabBanco.SetBounds(0, 46, 210, 36);
+  end
+  else
+  begin
+    skSalvarColab.SetBounds(0, 4, 95, 36);
+    skNovoColab.SetBounds(330, 4, 95, 36);
+    skExcluirColabBanco.SetBounds(215, 46, 210, 36);
+  end;
+  ConfigurarGridColaboradores;
+
+  // Horários: envio da jornada ao relógio
+  skSalvarEnviarHorario.Visible := not Hamster;
+  if Hamster then
+    skNovoHorarioForm.SetBounds(118, 4, 120, 36)
+  else
+    skNovoHorarioForm.SetBounds(330, 4, 100, 36);
+
+  // Empregador: envio/leitura no relógio
+  skEnviarEmpRelogio.Visible := not Hamster;
+  skLerEmpRelogio.Visible := not Hamster;
+  lblEmpRelogioDestino.Visible := not Hamster;
+  cmbEmpRelogioDestino.Visible := not Hamster;
+end;
+
+procedure TfrmMain.AtualizarInfoBiometria(AQry: TDataSet);
+var
+  Fld: TField;
+begin
+  if not Assigned(lblBioStatus) then
+    Exit;
+
+  FColabBioCadastrada := False;
+  if (AQry <> nil) and (not AQry.IsEmpty) then
+  begin
+    Fld := AQry.FindField('COL_BIOMETRIA_CADASTRADA');
+    FColabBioCadastrada := (Fld <> nil) and SameText(Fld.AsString, 'S');
+  end;
+
+  if FColabBioCadastrada then
+  begin
+    lblBioStatus.Caption := '✅ Digital cadastrada';
+    lblBioStatus.Font.Color := $001A8C2B;
+    Fld := AQry.FindField('COL_BIOMETRIA_DATA');
+    if (Fld <> nil) and not Fld.IsNull then
+      lblBioData.Caption := 'Cadastrada em ' + FormatDateTime('dd/mm/yyyy hh:nn', Fld.AsDateTime)
+    else
+      lblBioData.Caption := '';
+    skCadastrarBio.Caption := '👆 Recadastrar';
+  end
+  else
+  begin
+    lblBioStatus.Caption := '⏳ Nenhuma digital cadastrada';
+    lblBioStatus.Font.Color := $00247BA0;
+    if FSelectedColabId > 0 then
+      lblBioData.Caption := 'Clique em "Cadastrar Digital" e siga as instruções do leitor.'
+    else
+      lblBioData.Caption := 'Salve o colaborador para poder cadastrar a digital.';
+    skCadastrarBio.Caption := '👆 Cadastrar Digital';
+  end;
+  skTestarBio.Enabled := FColabBioCadastrada;
+  skRemoverBio.Enabled := FColabBioCadastrada;
+end;
+
+function TfrmMain.LeitorLivreParaUso: Boolean;
+begin
+  Result := False;
+  if TerminalPontoAberto then
+  begin
+    MessageDlg('O Terminal de Ponto está aberto e usando o leitor Hamster DX.'#13#10 +
+      'Feche o terminal para cadastrar ou testar digitais.', mtInformation, [mbOK], 0);
+    Exit;
+  end;
+  Screen.Cursor := crHourGlass;
+  try
+    Result := AguardarLeitorLivre;
+  finally
+    Screen.Cursor := crDefault;
+  end;
+  if not Result then
+    MessageDlg('O leitor Hamster DX ainda está sendo liberado. Tente novamente em alguns segundos.',
+      mtWarning, [mbOK], 0);
+end;
+
+procedure TfrmMain.skCfgTestarLeitorClick(Sender: TObject);
+var
+  Leitor: THamsterDX;
+  Template: string;
+  Ok: Boolean;
+begin
+  if not LeitorLivreParaUso then
+    Exit;
+
+  if not RequisitosHamsterOk then
+  begin
+    AtualizarStatusRequisitosHamster;
+    LogMessage('⚠️ Driver/SDK do Hamster DX incompleto nesta máquina: ' + lblCfgHamsterReq.Caption, True);
+    if MessageDlg('Driver ou SDK do leitor não encontrado.'#13#10#13#10 +
+      lblCfgHamsterReq.Caption + #13#10#13#10 +
+      'Deseja instalar agora?', mtWarning, [mbYes, mbNo], 0) = mrYes then
+      skCfgInstalarHamsterClick(nil);
+    if not RequisitosHamsterOk then
+      Exit;
+  end;
+
+  Leitor := THamsterDX.Create;
+  try
+    Screen.Cursor := crHourGlass;
+    try
+      Ok := Leitor.Abrir;
+    finally
+      Screen.Cursor := crDefault;
+    end;
+
+    if not Ok then
+    begin
+      LogMessage('⚠️ ' + Leitor.UltimoErro, True);
+      MessageDlg(Leitor.UltimoErro + #13#10#13#10 +
+        'Verifique se o leitor está conectado na USB e se o driver está instalado.', mtError, [mbOK], 0);
+      Exit;
+    end;
+
+    LogMessage('✅ Leitor biométrico Hamster DX conectado e pronto.');
+    if MessageDlg('Leitor Hamster DX conectado e pronto!'#13#10#13#10 +
+      'Deseja fazer uma leitura de teste agora?', mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+    begin
+      if Leitor.Capturar(Template, True) then
+        MessageDlg('Leitura realizada com sucesso. O leitor está funcionando corretamente.', mtInformation, [mbOK], 0)
+      else
+        MessageDlg('Leitura não concluída.'#13#10 + Leitor.UltimoErro, mtWarning, [mbOK], 0);
+    end;
+  finally
+    Leitor.Free;
+  end;
+end;
+
+procedure TfrmMain.skCadastrarBioClick(Sender: TObject);
+var
+  Leitor: THamsterDX;
+  Template, Nome: string;
+  Outras, Todas: TDigitaisCadastradas;
+  Digital, Dono: TDigitalCadastrada;
+  Duplicada: Boolean;
+begin
+  if FSelectedColabId <= 0 then
+  begin
+    ShowMessage('Salve o colaborador antes de cadastrar a biometria.');
+    Exit;
+  end;
+  Nome := Trim(edtColabNome.Text);
+
+  if FColabBioCadastrada and (MessageDlg(Format('"%s" já possui digital cadastrada. Deseja substituir?', [Nome]),
+    mtConfirmation, [mbYes, mbNo], 0) <> mrYes) then
+    Exit;
+
+  if not LeitorLivreParaUso then
+    Exit;
+
+  Leitor := THamsterDX.Create;
+  try
+    // O assistente do SDK pede várias leituras do(s) dedo(s)
+    if not Leitor.Cadastrar(Template) then
+    begin
+      if Leitor.UltimoErro <> '' then
+      begin
+        LogMessage('⚠️ ' + Leitor.UltimoErro, True);
+        MessageDlg('Não foi possível cadastrar a digital.'#13#10 + Leitor.UltimoErro, mtWarning, [mbOK], 0);
+      end;
+      Exit;
+    end;
+
+    // A mesma digital não deve pertencer a dois colaboradores
+    Duplicada := False;
+    try
+      Todas := dmDados.GetDigitaisCadastradas;
+      SetLength(Outras, 0);
+      for Digital in Todas do
+        if Digital.PessoaId <> FSelectedColabId then
+          Outras := Outras + [Digital];
+      if Length(Outras) > 0 then
+      begin
+        Leitor.CarregarDigitais(Outras);
+        Duplicada := Leitor.Identificar(Template, AppConfig.Relogio.NivelSeguranca, Dono);
+      end;
+    except
+      Duplicada := False;
+    end;
+
+    if Duplicada and (MessageDlg(Format('Atenção: esta digital parece já estar cadastrada para "%s".'#13#10 +
+      'Deseja gravar mesmo assim para "%s"?', [Dono.Nome, Nome]), mtWarning, [mbYes, mbNo], 0) <> mrYes) then
+      Exit;
+
+    if dmDados.SalvarBiometriaColaborador(FSelectedColabId, Template) then
+    begin
+      LogMessage(Format('👆 Digital cadastrada para o colaborador %s (ID %d).', [Nome, FSelectedColabId]));
+      CarregarColaboradores;
+      AtualizarDashboard;
+      MessageDlg('Digital cadastrada com sucesso!', mtInformation, [mbOK], 0);
+    end
+    else
+    begin
+      LogMessage('⚠️ ' + dmDados.LastError, True);
+      MessageDlg(dmDados.LastError, mtError, [mbOK], 0);
+    end;
+  finally
+    Leitor.Free;
+  end;
+end;
+
+procedure TfrmMain.skTestarBioClick(Sender: TObject);
+var
+  Leitor: THamsterDX;
+  Armazenado, Capturado: string;
+begin
+  if FSelectedColabId <= 0 then
+    Exit;
+  Armazenado := dmDados.GetBiometriaColaborador(FSelectedColabId);
+  if Armazenado = '' then
+  begin
+    ShowMessage('Este colaborador ainda não possui digital cadastrada.');
+    Exit;
+  end;
+
+  if not LeitorLivreParaUso then
+    Exit;
+
+  Leitor := THamsterDX.Create;
+  try
+    if not Leitor.Capturar(Capturado, True) then
+    begin
+      if Leitor.UltimoErro <> '' then
+        MessageDlg('Leitura não concluída.'#13#10 + Leitor.UltimoErro, mtWarning, [mbOK], 0);
+      Exit;
+    end;
+
+    if Leitor.Comparar(Capturado, Armazenado) then
+      MessageDlg(Format('✅ A digital confere com o cadastro de "%s".', [Trim(edtColabNome.Text)]),
+        mtInformation, [mbOK], 0)
+    else
+      MessageDlg(Format('❌ A digital NÃO confere com o cadastro de "%s".'#13#10 +
+        'Tente novamente ou recadastre a digital.', [Trim(edtColabNome.Text)]), mtWarning, [mbOK], 0);
+  finally
+    Leitor.Free;
+  end;
+end;
+
+procedure TfrmMain.skRemoverBioClick(Sender: TObject);
+begin
+  if FSelectedColabId <= 0 then
+    Exit;
+  if MessageDlg(Format('Remover a digital cadastrada de "%s"?'#13#10 +
+    'O colaborador não conseguirá mais registrar o ponto no leitor até cadastrar novamente.',
+    [Trim(edtColabNome.Text)]), mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+    Exit;
+
+  if dmDados.RemoverBiometriaColaborador(FSelectedColabId) then
+  begin
+    LogMessage(Format('🗑️ Digital removida do colaborador %s (ID %d).', [Trim(edtColabNome.Text), FSelectedColabId]));
+    CarregarColaboradores;
+    AtualizarDashboard;
+  end
+  else
+    ShowMessage('Não foi possível remover a digital do colaborador.');
+end;
+
+procedure TfrmMain.AbrirTerminalBiometrico;
+begin
+  if not dmDados.IsConectado then
+  begin
+    ShowMessage('Conecte ao banco de dados antes de abrir o Terminal de Ponto.');
+    Exit;
+  end;
+  AbrirTerminalPonto(LogMessage, TerminalBatidaRegistrada);
+end;
+
+procedure TfrmMain.TerminalBatidaRegistrada;
+begin
+  lblCard4Val.Caption := FormatDateTime('hh:nn:ss', Now);
+  AtualizarDashboard;
+  if pgcMain.ActivePage = tabMarcacoes then
+    CarregarMarcacoes;
+end;
+
+procedure TfrmMain.skRelatorioESClick(Sender: TObject);
+var
+  Html, ArquivoTemp: string;
+  Razao, Cnpj, Endereco, Cei, CpfResp: string;
+  Stream: TStreamWriter;
+begin
+  if dtpFim.Date < dtpIni.Date then
+  begin
+    ShowMessage('A data final deve ser maior ou igual à data inicial.');
+    Exit;
+  end;
+
+  Razao := 'Empresa';
+  Cnpj := '';
+  dmDados.GetEmpresaPrincipal(Razao, Cnpj, Endereco, Cei, CpfResp);
+
+  Screen.Cursor := crHourGlass;
+  try
+    Html := TRelatorioPonto.GerarEntradasSaidasHTML(dtpIni.Date, dtpFim.Date, 0, Razao, Cnpj);
+  finally
+    Screen.Cursor := crDefault;
+  end;
+
+  ArquivoTemp := IncludeTrailingPathDelimiter(TPath.GetTempPath) + 'Relatorio_Entradas_Saidas_' +
+    FormatDateTime('yyyymmdd_hhnnss', Now) + '.html';
+  Stream := TStreamWriter.Create(ArquivoTemp, False, TEncoding.UTF8);
+  try
+    Stream.Write(Html);
+  finally
+    Stream.Free;
+  end;
+
+  ShellExecute(0, 'open', PChar(ArquivoTemp), nil, nil, SW_SHOWNORMAL);
+  LogMessage(Format('📋 Relatório de Entradas e Saídas (%s a %s) gerado: %s',
+    [FormatDateTime('dd/mm/yyyy', dtpIni.Date), FormatDateTime('dd/mm/yyyy', dtpFim.Date), ArquivoTemp]));
 end;
 
 procedure TfrmMain.ConfigurarGridRelogios;
@@ -3810,19 +4687,38 @@ begin
   Col.Title.Alignment := taLeftJustify;
   Col.Width := 140;
 
-  Col := dbgColaboradores.Columns.Add;
-  Col.FieldName := 'COL_SINCRONIZADO_RELOGIO';
-  Col.Title.Caption := 'Sincronizado?';
-  Col.Title.Alignment := taCenter;
-  Col.Alignment := taCenter;
-  Col.Width := 120;
+  if ModoHamsterDX then
+  begin
+    Col := dbgColaboradores.Columns.Add;
+    Col.FieldName := 'COL_BIOMETRIA_CADASTRADA';
+    Col.Title.Caption := 'Biometria';
+    Col.Title.Alignment := taCenter;
+    Col.Alignment := taCenter;
+    Col.Width := 120;
 
-  Col := dbgColaboradores.Columns.Add;
-  Col.FieldName := 'COL_ULTIMA_SINCRONIZACAO';
-  Col.Title.Caption := 'Último Envio';
-  Col.Title.Alignment := taCenter;
-  Col.Alignment := taCenter;
-  Col.Width := 135;
+    Col := dbgColaboradores.Columns.Add;
+    Col.FieldName := 'COL_BIOMETRIA_DATA';
+    Col.Title.Caption := 'Cadastrada em';
+    Col.Title.Alignment := taCenter;
+    Col.Alignment := taCenter;
+    Col.Width := 135;
+  end
+  else
+  begin
+    Col := dbgColaboradores.Columns.Add;
+    Col.FieldName := 'COL_SINCRONIZADO_RELOGIO';
+    Col.Title.Caption := 'Sincronizado?';
+    Col.Title.Alignment := taCenter;
+    Col.Alignment := taCenter;
+    Col.Width := 120;
+
+    Col := dbgColaboradores.Columns.Add;
+    Col.FieldName := 'COL_ULTIMA_SINCRONIZACAO';
+    Col.Title.Caption := 'Último Envio';
+    Col.Title.Alignment := taCenter;
+    Col.Alignment := taCenter;
+    Col.Width := 135;
+  end;
 
   Col := dbgColaboradores.Columns.Add;
   Col.FieldName := 'PES_STATUS';
@@ -3973,6 +4869,24 @@ begin
       BadgeTxtColor := $00B06000;
     end;
   end
+  else if (Column.FieldName = 'COL_BIOMETRIA_CADASTRADA') then
+  begin
+    IsBadge := True;
+    if SameText(Fld.AsString, 'S') then
+    begin
+      Txt := '👆 Cadastrada';
+      BadgeBg := $00E6F4EA;
+      BadgeBorder := $00CEEAD6;
+      BadgeTxtColor := $00137333;
+    end
+    else
+    begin
+      Txt := '⏳ Sem digital';
+      BadgeBg := $00FEF7E0;
+      BadgeBorder := $00FEEFC3;
+      BadgeTxtColor := $00B06000;
+    end;
+  end
   else if (Column.FieldName = 'PES_STATUS') or (Column.FieldName = 'PRE_ATIVO') or (Column.FieldName = 'HOR_ATIVO') then
   begin
     IsBadge := True;
@@ -4105,6 +5019,13 @@ begin
       BadgeBg := $00FEF7E0;
       BadgeBorder := $00FEEFC3;
       BadgeTxtColor := $00B06000;
+    end
+    else if SameText(Fld.AsString, 'B') then
+    begin
+      Txt := '👆 Biometria';
+      BadgeBg := $00E6F4EA;
+      BadgeBorder := $00CEEAD6;
+      BadgeTxtColor := $00137333;
     end
     else
     begin

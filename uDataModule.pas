@@ -9,9 +9,11 @@ uses
   FireDAC.Stan.Async, FireDAC.Phys, FireDAC.Phys.FB, FireDAC.Phys.FBDef,
   FireDAC.VCLUI.Wait, FireDAC.Stan.Param, FireDAC.DatS, FireDAC.DApt.Intf,
   FireDAC.DApt, FireDAC.Comp.UI, FireDAC.Comp.Client, FireDAC.Comp.DataSet,
-  Data.DB, uConfig;
+  Data.DB, uConfig, uBiometriaHamster;
 
 type
+  TResultadoBatida = (rbRegistrada, rbRepetida, rbErro);
+
   TBdVersaoItem = record
     Id: Integer;
     Numero: Integer;
@@ -41,6 +43,9 @@ type
     procedure Desconectar;
     function IsConectado: Boolean;
     function TestarConexao(out AErro: string): Boolean;
+    // Login em TB_USUARIO (ERP). AAdmin = USU_ADMINISTRADOR = 'S'
+    function AutenticarUsuario(const ALogin, ASenha: string; out ANome: string;
+      out AAdmin: Boolean): Boolean;
 
     // Relógios
     function GetRelogios(const AApenasAtivos: Boolean = False): TFDQuery;
@@ -61,6 +66,15 @@ type
     function ExcluirColaborador(APessoaId: Integer; out AErro: string; out AInativado: Boolean): Boolean;
     procedure MarcarColaboradorSincronizado(APessoaId: Integer);
     procedure MarcarColaboradorNaoSincronizado(APessoaId: Integer);
+
+    // Biometria (leitor Hamster DX)
+    function SalvarBiometriaColaborador(APessoaId: Integer; const ATemplate: string): Boolean;
+    function RemoverBiometriaColaborador(APessoaId: Integer): Boolean;
+    function GetBiometriaColaborador(APessoaId: Integer): string;
+    function GetDigitaisCadastradas: TDigitaisCadastradas;
+    function GetTotalBiometrias(out ATotal: Integer): Boolean;
+    function RegistrarBatidaBiometrica(APessoaId: Integer; ADataHora: TDateTime;
+      AIntervaloMinimoMin: Integer; out ATipoBatida: string; out AUltimaBatida: TDateTime): TResultadoBatida;
 
     // Horários / Jornadas de Trabalho
     function GetHorarios(const AApenasAtivos: Boolean = True): TFDQuery;
@@ -101,6 +115,9 @@ type
     function TabelaExiste(const ANomeTabela: string): Boolean;
     function CampoExiste(const ANomeTabela, ANomeCampo: string): Boolean;
     function GeneratorExiste(const ANomeGen: string): Boolean;
+    function ObterProximoIdPessoa: Integer;
+    procedure GarantirAutoIncremento(const ATabela, ACampo, AGenerator: string);
+    procedure GarantirCampoOpcional(const ATabela, ACampo: string);
     function ExecutarComandoDDL(const ASQL: string): Boolean;
     function ObterVersaoBanco: Integer;
     function VerificarEAtualizarEstruturaBanco(out ALogMigracao: string): Boolean;
@@ -194,6 +211,39 @@ begin
   Result := Conectar;
   if not Result then
     AErro := FLastError;
+end;
+
+function TdmDados.AutenticarUsuario(const ALogin, ASenha: string; out ANome: string;
+  out AAdmin: Boolean): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  ANome := '';
+  AAdmin := False;
+  if not IsConectado and not Conectar then
+    raise Exception.Create(FLastError);
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'SELECT USU_NOME, USU_ADMINISTRADOR FROM TB_USUARIO ' +
+      'WHERE UPPER(TRIM(USU_LOGIN)) = UPPER(:LOGIN) AND USU_SENHA = :SENHA ' +
+      '  AND (USU_STATUS IS NULL OR USU_STATUS <> ''I'')';
+    Qry.ParamByName('LOGIN').AsString := Trim(ALogin);
+    Qry.ParamByName('SENHA').AsString := ASenha;
+    Qry.Open;
+    if Qry.IsEmpty then
+      Exit;
+    ANome := Qry.FieldByName('USU_NOME').AsString;
+    if ANome = '' then
+      ANome := Trim(ALogin);
+    AAdmin := SameText(Trim(Qry.FieldByName('USU_ADMINISTRADOR').AsString), 'S');
+    Result := True;
+  finally
+    Qry.Free;
+  end;
 end;
 
 function TdmDados.GetRelogios(const AApenasAtivos: Boolean): TFDQuery;
@@ -375,7 +425,7 @@ begin
 
   SQL := 'SELECT P.PES_ID, P.PES_RSOCIAL_NOME, P.PES_CNPJ_CPF, P.PES_STATUS, P.PES_CODIGO_ACESSO, ' +
          'C.COL_PIS, C.COL_CPF, C.COL_CARTAO_PONTO, C.COL_FUNCAO, C.COL_HORARIO, H.HOR_DESCRICAO, ' +
-         'C.COL_SINCRONIZADO_RELOGIO, C.COL_ULTIMA_SINCRONIZACAO ' +
+         'C.COL_SINCRONIZADO_RELOGIO, C.COL_ULTIMA_SINCRONIZACAO, C.COL_BIOMETRIA_CADASTRADA, C.COL_BIOMETRIA_DATA ' +
          'FROM TB_PESSOA P ' +
          'LEFT JOIN TB_COLABORADOR C ON C.COL_PESSOA = P.PES_ID ' +
          'LEFT JOIN TB_PONTO_HORARIO H ON H.HOR_ID = C.COL_HORARIO ' +
@@ -403,7 +453,7 @@ begin
   Qry.SQL.Text :=
     'SELECT P.PES_ID, P.PES_RSOCIAL_NOME, P.PES_CNPJ_CPF, P.PES_STATUS, P.PES_CODIGO_ACESSO, ' +
     'C.COL_PIS, C.COL_CPF, C.COL_CARTAO_PONTO, C.COL_FUNCAO, C.COL_HORARIO, H.HOR_DESCRICAO, ' +
-    'C.COL_SINCRONIZADO_RELOGIO, C.COL_ULTIMA_SINCRONIZACAO ' +
+    'C.COL_SINCRONIZADO_RELOGIO, C.COL_ULTIMA_SINCRONIZACAO, C.COL_BIOMETRIA_CADASTRADA, C.COL_BIOMETRIA_DATA ' +
     'FROM TB_PESSOA P ' +
     'LEFT JOIN TB_COLABORADOR C ON C.COL_PESSOA = P.PES_ID ' +
     'LEFT JOIN TB_PONTO_HORARIO H ON H.HOR_ID = C.COL_HORARIO ' +
@@ -439,10 +489,11 @@ begin
     begin
       // 1. Inserir em TB_PESSOA
       Qry.SQL.Text :=
-        'INSERT INTO TB_PESSOA (PES_RSOCIAL_NOME, PES_CNPJ_CPF, PES_STATUS, PES_COLABORADOR, ' +
+        'INSERT INTO TB_PESSOA (PES_ID, PES_RSOCIAL_NOME, PES_CNPJ_CPF, PES_STATUS, PES_COLABORADOR, ' +
         'PES_CODIGO_ACESSO, PES_DT_CADASTRO) ' +
-        'VALUES (:NOME, :CPF, :STATUS, ''S'', :CODIGO, CURRENT_TIMESTAMP) ' +
+        'VALUES (:ID, :NOME, :CPF, :STATUS, ''S'', :CODIGO, CURRENT_TIMESTAMP) ' +
         'RETURNING PES_ID';
+      Qry.ParamByName('ID').AsInteger := ObterProximoIdPessoa;
       Qry.ParamByName('NOME').AsString := Trim(ANome);
       Qry.ParamByName('CPF').AsString := CleanCpf;
       Qry.ParamByName('STATUS').AsString := StatusStr;
@@ -621,6 +672,227 @@ begin
       'WHERE COL_PESSOA = :PESSOA';
     Qry.ParamByName('PESSOA').AsInteger := APessoaId;
     Qry.ExecSQL;
+  finally
+    Qry.Free;
+  end;
+end;
+
+// ======================= Biometria (Hamster DX) =======================
+
+function TdmDados.SalvarBiometriaColaborador(APessoaId: Integer; const ATemplate: string): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  FLastError := '';
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'UPDATE TB_COLABORADOR SET ' +
+      'COL_BIOMETRIA = :BIO, ' +
+      'COL_BIOMETRIA_CADASTRADA = ''S'', ' +
+      'COL_BIOMETRIA_DATA = CURRENT_TIMESTAMP ' +
+      'WHERE COL_PESSOA = :PESSOA';
+    Qry.ParamByName('BIO').AsWideMemo := ATemplate;
+    Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+    Qry.ExecSQL;
+    Result := Qry.RowsAffected > 0;
+    if not Result then
+      FLastError := 'Colaborador não possui cadastro complementar (TB_COLABORADOR). Salve o colaborador antes de cadastrar a biometria.';
+  except
+    on E: Exception do
+      FLastError := 'Erro ao gravar biometria: ' + E.Message;
+  end;
+  Qry.Free;
+end;
+
+function TdmDados.RemoverBiometriaColaborador(APessoaId: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'UPDATE TB_COLABORADOR SET ' +
+      'COL_BIOMETRIA = NULL, ' +
+      'COL_BIOMETRIA_CADASTRADA = ''N'', ' +
+      'COL_BIOMETRIA_DATA = NULL ' +
+      'WHERE COL_PESSOA = :PESSOA';
+    Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+    Qry.ExecSQL;
+    Result := Qry.RowsAffected > 0;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetBiometriaColaborador(APessoaId: Integer): string;
+var
+  Qry: TFDQuery;
+begin
+  Result := '';
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'SELECT COL_BIOMETRIA FROM TB_COLABORADOR WHERE COL_PESSOA = :PESSOA';
+    Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+    Qry.Open;
+    if not Qry.IsEmpty then
+      Result := Trim(Qry.Fields[0].AsString);
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetDigitaisCadastradas: TDigitaisCadastradas;
+var
+  Qry: TFDQuery;
+  Digital: TDigitalCadastrada;
+begin
+  SetLength(Result, 0);
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'SELECT P.PES_ID, P.PES_RSOCIAL_NOME, C.COL_BIOMETRIA ' +
+      'FROM TB_COLABORADOR C ' +
+      'JOIN TB_PESSOA P ON P.PES_ID = C.COL_PESSOA ' +
+      'WHERE C.COL_BIOMETRIA_CADASTRADA = ''S'' ' +
+      '  AND C.COL_BIOMETRIA IS NOT NULL ' +
+      '  AND COALESCE(P.PES_STATUS, ''A'') = ''A'' ' +
+      'ORDER BY P.PES_ID';
+    Qry.Open;
+    while not Qry.Eof do
+    begin
+      Digital.PessoaId := Qry.FieldByName('PES_ID').AsInteger;
+      Digital.Nome := Qry.FieldByName('PES_RSOCIAL_NOME').AsString;
+      Digital.Template := Trim(Qry.FieldByName('COL_BIOMETRIA').AsString);
+      if Digital.Template <> '' then
+        Result := Result + [Digital];
+      Qry.Next;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetTotalBiometrias(out ATotal: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  ATotal := 0;
+  Result := False;
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      Qry.SQL.Text :=
+        'SELECT COUNT(*) FROM TB_COLABORADOR C ' +
+        'JOIN TB_PESSOA P ON P.PES_ID = C.COL_PESSOA ' +
+        'WHERE C.COL_BIOMETRIA_CADASTRADA = ''S'' AND COALESCE(P.PES_STATUS, ''A'') = ''A''';
+      Qry.Open;
+      ATotal := Qry.Fields[0].AsInteger;
+      Result := True;
+    except
+      on E: Exception do
+        FLastError := E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.RegistrarBatidaBiometrica(APessoaId: Integer; ADataHora: TDateTime;
+  AIntervaloMinimoMin: Integer; out ATipoBatida: string; out AUltimaBatida: TDateTime): TResultadoBatida;
+var
+  Qry: TFDQuery;
+  QtdHoje: Integer;
+  Cpf, Pis: string;
+begin
+  Result := rbErro;
+  ATipoBatida := '';
+  AUltimaBatida := 0;
+  FLastError := '';
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+
+      // Batidas do dia: quantidade define Entrada (par) ou Saída (ímpar)
+      Qry.SQL.Text :=
+        'SELECT COUNT(*) AS QTD, MAX(PMA_DATA_HORA) AS ULTIMA FROM TB_PONTO_MARCACAO ' +
+        'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM';
+      Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+      Qry.ParamByName('INI').AsDateTime := StartOfTheDay(ADataHora);
+      Qry.ParamByName('FIM').AsDateTime := EndOfTheDay(ADataHora);
+      Qry.Open;
+      QtdHoje := Qry.FieldByName('QTD').AsInteger;
+      if not Qry.FieldByName('ULTIMA').IsNull then
+        AUltimaBatida := Qry.FieldByName('ULTIMA').AsDateTime;
+      Qry.Close;
+
+      if Odd(QtdHoje) then
+        ATipoBatida := 'S'
+      else
+        ATipoBatida := 'E';
+
+      // Leitura repetida em sequência (colaborador encostou o dedo duas vezes)
+      if (AUltimaBatida > 0) and (AIntervaloMinimoMin > 0) and
+         (MinutesBetween(ADataHora, AUltimaBatida) < AIntervaloMinimoMin) then
+      begin
+        if Odd(QtdHoje) then
+          ATipoBatida := 'E'
+        else
+          ATipoBatida := 'S';
+        Exit(rbRepetida);
+      end;
+
+      Qry.SQL.Text := 'SELECT COL_CPF, COL_PIS FROM TB_COLABORADOR WHERE COL_PESSOA = :PESSOA';
+      Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+      Qry.Open;
+      Cpf := Qry.FieldByName('COL_CPF').AsString;
+      Pis := Qry.FieldByName('COL_PIS').AsString;
+      Qry.Close;
+
+      Qry.SQL.Text :=
+        'INSERT INTO TB_PONTO_MARCACAO (PMA_PESSOA, PMA_RELOGIO, PMA_DATA_HORA, PMA_EVENTO, ' +
+        'PMA_ORIGEM, PMA_PIS, PMA_CPF, PMA_TIPO_BATIDA, PMA_TIPO_IDENTIFICACAO, PMA_EXPORTADO) ' +
+        'VALUES (:PESSOA, NULL, :DH, 7, ''B'', :PIS, :CPF, :TIPO, ''BIOMETRIA'', ''N'')';
+      Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+      Qry.ParamByName('DH').AsDateTime := RecodeMilliSecond(ADataHora, 0);
+      Qry.ParamByName('PIS').AsString := Pis;
+      Qry.ParamByName('CPF').AsString := Cpf;
+      Qry.ParamByName('TIPO').AsString := ATipoBatida;
+      Qry.ExecSQL;
+
+      Result := rbRegistrada;
+    except
+      on E: Exception do
+      begin
+        FLastError := 'Erro ao registrar batida: ' + E.Message;
+        Result := rbErro;
+      end;
+    end;
   finally
     Qry.Free;
   end;
@@ -1273,7 +1545,7 @@ begin
 end;
 
 const
-  DB_SCHEMA_VERSION = 5;
+  DB_SCHEMA_VERSION = 6;
 
 function TdmDados.TabelaExiste(const ANomeTabela: string): Boolean;
 var
@@ -1323,6 +1595,150 @@ begin
     Qry.ParamByName('GEN').AsString := ANomeGen;
     Qry.Open;
     Result := not Qry.IsEmpty;
+  finally
+    Qry.Free;
+  end;
+end;
+
+procedure TdmDados.GarantirAutoIncremento(const ATabela, ACampo, AGenerator: string);
+var
+  Qry: TFDQuery;
+  NomeTrigger: string;
+  MaxId, ValorGen: Int64;
+  ExisteNosso, ExisteOutro: Boolean;
+begin
+  if not TabelaExiste(ATabela) then
+    Exit;
+  if not GeneratorExiste(AGenerator) then
+    ExecutarComandoDDL('CREATE GENERATOR ' + AGenerator);
+
+  NomeTrigger := 'TRG_' + Copy(ATabela, 4, MaxInt) + '_BI'; // TB_PONTO_X -> TRG_PONTO_X_BI
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+
+    // Generator nunca abaixo do maior ID já gravado (registros inseridos com ID manual)
+    Qry.SQL.Text := 'SELECT COALESCE(MAX(' + ACampo + '), 0) FROM ' + ATabela;
+    Qry.Open;
+    MaxId := Qry.Fields[0].AsLargeInt;
+    Qry.Close;
+    Qry.SQL.Text := 'SELECT GEN_ID(' + AGenerator + ', 0) FROM RDB$DATABASE';
+    Qry.Open;
+    ValorGen := Qry.Fields[0].AsLargeInt;
+    Qry.Close;
+    if ValorGen < MaxId then
+    begin
+      Qry.SQL.Text := 'SELECT GEN_ID(' + AGenerator + ', ' + IntToStr(MaxId - ValorGen) + ') FROM RDB$DATABASE';
+      Qry.Open;
+      Qry.Close;
+    end;
+
+    Qry.SQL.Text := 'SELECT 1 FROM RDB$TRIGGERS WHERE UPPER(TRIM(RDB$TRIGGER_NAME)) = :NOME';
+    Qry.ParamByName('NOME').AsString := UpperCase(NomeTrigger);
+    Qry.Open;
+    ExisteNosso := not Qry.IsEmpty;
+    Qry.Close;
+
+    // Outro trigger BEFORE INSERT (ex.: T_PONTO_X_BI) já gera o ID: não duplica
+    Qry.SQL.Text :=
+      'SELECT 1 FROM RDB$TRIGGERS WHERE UPPER(TRIM(RDB$RELATION_NAME)) = :TAB ' +
+      'AND RDB$TRIGGER_TYPE = 1 AND UPPER(TRIM(RDB$TRIGGER_NAME)) <> :NOME';
+    Qry.ParamByName('TAB').AsString := UpperCase(ATabela);
+    Qry.ParamByName('NOME').AsString := UpperCase(NomeTrigger);
+    Qry.Open;
+    ExisteOutro := not Qry.IsEmpty;
+  finally
+    Qry.Free;
+  end;
+
+  if ExisteOutro then
+  begin
+    if ExisteNosso then
+      ExecutarComandoDDL('DROP TRIGGER ' + NomeTrigger);
+    Exit;
+  end;
+  if ExisteNosso then
+    Exit;
+
+  ExecutarComandoDDL(
+    'CREATE TRIGGER ' + NomeTrigger + ' FOR ' + ATabela + ' ACTIVE BEFORE INSERT POSITION 0 AS ' +
+    'BEGIN ' +
+    '  IF (NEW.' + ACampo + ' IS NULL) THEN NEW.' + ACampo + ' = GEN_ID(' + AGenerator + ', 1); ' +
+    'END');
+end;
+
+procedure TdmDados.GarantirCampoOpcional(const ATabela, ACampo: string);
+var
+  Qry: TFDQuery;
+begin
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'SELECT 1 FROM RDB$RELATION_FIELDS ' +
+      'WHERE UPPER(TRIM(RDB$RELATION_NAME)) = :TAB AND UPPER(TRIM(RDB$FIELD_NAME)) = :CAMPO ' +
+      'AND COALESCE(RDB$NULL_FLAG, 0) = 1';
+    Qry.ParamByName('TAB').AsString := UpperCase(ATabela);
+    Qry.ParamByName('CAMPO').AsString := UpperCase(ACampo);
+    Qry.Open;
+    if Qry.IsEmpty then
+      Exit;
+  finally
+    Qry.Free;
+  end;
+
+  // Firebird 3+: DROP NOT NULL. Firebird 2.5: limpa o flag direto no catálogo.
+  if not ExecutarComandoDDL('ALTER TABLE ' + ATabela + ' ALTER ' + ACampo + ' DROP NOT NULL') then
+    ExecutarComandoDDL(
+      'UPDATE RDB$RELATION_FIELDS SET RDB$NULL_FLAG = NULL ' +
+      'WHERE RDB$RELATION_NAME = ''' + UpperCase(ATabela) + ''' AND RDB$FIELD_NAME = ''' + UpperCase(ACampo) + '''');
+end;
+
+function TdmDados.ObterProximoIdPessoa: Integer;
+var
+  Qry: TFDQuery;
+  NomeGen: string;
+  MaxId, ValorGen: Int64;
+begin
+  // TB_PESSOA pode nao ter trigger de auto-incremento: gera o ID aqui.
+  // Usa o generator da tabela se existir (mantendo-o sincronizado), senao MAX + 1.
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+
+    Qry.SQL.Text := 'SELECT COALESCE(MAX(PES_ID), 0) FROM TB_PESSOA';
+    Qry.Open;
+    MaxId := Qry.Fields[0].AsLargeInt;
+    Qry.Close;
+
+    Qry.SQL.Text :=
+      'SELECT FIRST 1 TRIM(RDB$GENERATOR_NAME) FROM RDB$GENERATORS ' +
+      'WHERE COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND UPPER(RDB$GENERATOR_NAME) LIKE ''%PESSOA%'' ' +
+      'ORDER BY CHAR_LENGTH(TRIM(RDB$GENERATOR_NAME))';
+    Qry.Open;
+    if Qry.IsEmpty then
+      NomeGen := ''
+    else
+      NomeGen := Qry.Fields[0].AsString;
+    Qry.Close;
+
+    if NomeGen = '' then
+      Exit(MaxId + 1);
+
+    Qry.SQL.Text := 'SELECT GEN_ID("' + NomeGen + '", 1) FROM RDB$DATABASE';
+    Qry.Open;
+    ValorGen := Qry.Fields[0].AsLargeInt;
+    Qry.Close;
+
+    if ValorGen <= MaxId then
+    begin
+      // Generator atrasado em relacao aos dados: avanca ate MAX + 1
+      Qry.SQL.Text := 'SELECT GEN_ID("' + NomeGen + '", ' + IntToStr(MaxId + 1 - ValorGen) + ') FROM RDB$DATABASE';
+      Qry.Open;
+      ValorGen := Qry.Fields[0].AsLargeInt;
+      Qry.Close;
+    end;
+    Result := ValorGen;
   finally
     Qry.Free;
   end;
@@ -1526,7 +1942,8 @@ begin
       '  PMA_ORIGEM CHAR(1) DEFAULT ''C'', ' +
       '  PMA_EXPORTADO CHAR(1) DEFAULT ''N'', ' +
       '  PMA_EVENTO INTEGER DEFAULT 7, ' +
-      '  PMA_MOTIVO_AJUSTE VARCHAR(250)' +
+      '  PMA_MOTIVO_AJUSTE VARCHAR(250), ' +
+      '  PMA_CONTROLID_LOG_ID BIGINT' +
       ')');
     Alterou := True;
   end
@@ -1556,6 +1973,8 @@ begin
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_USUARIO_ALTERACAO VARCHAR(40)');
     if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_JUSTIFICATIVA_ID') then
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_JUSTIFICATIVA_ID INTEGER');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_CONTROLID_LOG_ID') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_CONTROLID_LOG_ID BIGINT');
   end;
 
   if not GeneratorExiste('GEN_PONTO_MARCACAO') then
@@ -1588,6 +2007,10 @@ begin
       ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_DEPARTAMENTO VARCHAR(50)');
     if not CampoExiste('TB_COLABORADOR', 'COL_BIOMETRIA_CADASTRADA') then
       ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA_CADASTRADA CHAR(1) DEFAULT ''N''');
+    if not CampoExiste('TB_COLABORADOR', 'COL_BIOMETRIA') then
+      ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA BLOB SUB_TYPE TEXT');
+    if not CampoExiste('TB_COLABORADOR', 'COL_BIOMETRIA_DATA') then
+      ExecutarComandoDDL('ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA_DATA TIMESTAMP');
   end;
 
   // 5. TB_PONTO_HORARIO e faixas
@@ -1688,6 +2111,16 @@ begin
 
   if not GeneratorExiste('GEN_PONTO_JUSTIFICATIVA') then
     ExecutarComandoDDL('CREATE GENERATOR GEN_PONTO_JUSTIFICATIVA');
+
+  // Auto-incremento das chaves: sem trigger os INSERTs sem ID falham (validation error ... null)
+  GarantirAutoIncremento('TB_PONTO_RELOGIO', 'PRE_ID', 'GEN_PONTO_RELOGIO');
+  GarantirAutoIncremento('TB_PONTO_MARCACAO', 'PMA_ID', 'GEN_PONTO_MARCACAO');
+  GarantirAutoIncremento('TB_PONTO_HORARIO', 'HOR_ID', 'GEN_PONTO_HORARIO');
+  GarantirAutoIncremento('TB_PONTO_JUSTIFICATIVA', 'JUS_ID', 'GEN_PONTO_JUSTIFICATIVA');
+
+  // Batidas do leitor USB (Hamster DX) e lançamentos manuais não têm relógio
+  GarantirCampoOpcional('TB_PONTO_MARCACAO', 'PMA_RELOGIO');
+  GarantirCampoOpcional('TB_PONTO_MARCACAO', 'PMA_CONTROLID_LOG_ID');
 
   // 7. Sincronizar Histórico e Scripts de cada Versão do Sistema
   SincronizarRegistroVersao(
@@ -1865,6 +2298,19 @@ begin
     '  ALTER TABLE TB_PONTO_MARCACAO ... OK [00:00:00.015]'#13#10 +
     '  ALTER TABLE TB_COLABORADOR ... OK [00:00:00.011]'#13#10 +
     '  ALTER TABLE TB_PONTO_JUSTIFICATIVA ... OK [00:00:00.009]'#13#10 +
+    'SCRIPT FINALIZADO COM SUCESSO.'
+  );
+
+  SincronizarRegistroVersao(
+    FDConnection, 6, '1.0.1', 'actVersao106',
+    'Integração com Leitor Biométrico Nitgen Hamster DX (Template da Digital do Colaborador)',
+    '-- Template (FIR texto NBioBSP) da digital do colaborador'#13#10 +
+    'ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA BLOB SUB_TYPE TEXT;'#13#10 +
+    'ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA_DATA TIMESTAMP;'#13#10#13#10 +
+    '-- Marcações do leitor biométrico: PMA_ORIGEM = ''B'', PMA_TIPO_IDENTIFICACAO = ''BIOMETRIA''',
+    'RUNNING SCRIPT [actVersao106] ...'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA ... OK'#13#10 +
+    '  ALTER TABLE TB_COLABORADOR ADD COL_BIOMETRIA_DATA ... OK'#13#10 +
     'SCRIPT FINALIZADO COM SUCESSO.'
   );
 

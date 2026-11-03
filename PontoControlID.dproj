@@ -129,8 +129,16 @@
             <Form>dmDados</Form>
             <DesignClass>TDataModule</DesignClass>
         </DCCReference>
+        <DCCReference Include="uPontoCalculoService.pas"/>
         <DCCReference Include="uPontoService.pas"/>
         <DCCReference Include="uSkiaButtons.pas"/>
+        <DCCReference Include="uBiometriaHamster.pas"/>
+        <DCCReference Include="uRelatorioPonto.pas"/>
+        <DCCReference Include="uFrmTerminalPonto.pas"/>
+        <DCCReference Include="uFrmLogin.pas"/>
+        <DCCReference Include="uFrmUpdate.pas">
+            <Form>frmUpdate</Form>
+        </DCCReference>
         <DCCReference Include="uFrmMain.pas">
             <Form>frmMain</Form>
         </DCCReference>

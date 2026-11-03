@@ -22,3 +22,27 @@ scratch/
 Config.ini
 PontoControlID_old.exe
 startup_error.log
+
+# Projeto legado (Ponto.dpr / PontoService) e backups locais - fora do repositorio
+Ponto.dpr
+Ponto.dproj
+Ponto.res
+PontoService.*
+servico-*.bat
+ponto.rar
+instalacao.sql
+uConfig-*.pas
+uConfigForm.*
+uControlID.pas
+uDM.*
+uLogin.*
+uPontoCore.pas
+uPrincipal.*
+uServico.*
+uServicoStatus.pas
+uServidorOnline.pas
+
+# Runtime do Skia e instaladores do Hamster: vao como assets da release (Instaladores.zip)
+sk4d.dll
+Instaladores/*
+!Instaladores/instalar_hamster.bat
