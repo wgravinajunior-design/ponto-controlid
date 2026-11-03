@@ -157,7 +157,14 @@ class _EspelhoPageState extends State<EspelhoPage> {
         ),
       );
 
+  /// Dias depois de hoje aparecem na grade, mas sem informações.
+  bool _futuro(DiaEspelho d) {
+    final h = DateTime.now();
+    return d.data.isAfter(DateTime(h.year, h.month, h.day));
+  }
+
   Color? _corLinha(DiaEspelho d) {
+    if (_futuro(d)) return null;
     if (d.tipoDia == TipoDia.feriado) return Colors.blue.withValues(alpha: .08);
     if (d.tipoDia == TipoDia.domingoDsr || d.tipoDia == TipoDia.sabadoCompensado || d.tipoDia == TipoDia.folga) {
       return d.dsrDescontado ? Colors.red.withValues(alpha: .08) : Colors.grey.withValues(alpha: .15);
@@ -233,21 +240,21 @@ class _EspelhoPageState extends State<EspelhoPage> {
           colunas: [
             GridCol('Data', 85, (d) => fmtData(d.data)),
             GridCol('Dia', 40, (d) => d.diaSemana),
-            GridCol('1ª Ent', 55, (d) => d.entrada1),
-            GridCol('1ª Saí', 55, (d) => d.saida1),
-            GridCol('2ª Ent', 55, (d) => d.entrada2),
-            GridCol('2ª Saí', 55, (d) => d.saida2),
-            GridCol('Outras', 90, (d) => d.batidasExtras),
-            GridCol('Previsto', 65, (d) => d.cargaPrevistaStr),
-            GridCol('Realizado', 70, (d) => d.trabalhadoStr),
-            GridCol('Extras', 70, (d) => d.extraMin > 0 && d.extra100 ? '${d.extraStr} 100%' : d.extraStr, cor: (d) => d.extraMin > 0 ? Colors.green.shade700 : null),
-            GridCol('Noturno', 60, (d) => d.noturnoMin > 0 ? minutosParaHora(d.noturnoMin) : ''),
-            GridCol('Interv.', 55, (d) => d.intervaloSuprimidoMin > 0 ? minutosParaHora(d.intervaloSuprimidoMin) : '',
+            GridCol('1ª Ent', 55, (d) => _futuro(d) ? '' : d.entrada1),
+            GridCol('1ª Saí', 55, (d) => _futuro(d) ? '' : d.saida1),
+            GridCol('2ª Ent', 55, (d) => _futuro(d) ? '' : d.entrada2),
+            GridCol('2ª Saí', 55, (d) => _futuro(d) ? '' : d.saida2),
+            GridCol('Outras', 90, (d) => _futuro(d) ? '' : d.batidasExtras),
+            GridCol('Previsto', 65, (d) => _futuro(d) ? '' : d.cargaPrevistaStr),
+            GridCol('Realizado', 70, (d) => _futuro(d) ? '' : d.trabalhadoStr),
+            GridCol('Extras', 70, (d) => _futuro(d) ? '' : d.extraMin > 0 && d.extra100 ? '${d.extraStr} 100%' : d.extraStr, cor: (d) => _futuro(d) ? null : d.extraMin > 0 ? Colors.green.shade700 : null),
+            GridCol('Noturno', 60, (d) => _futuro(d) ? '' : d.noturnoMin > 0 ? minutosParaHora(d.noturnoMin) : ''),
+            GridCol('Interv.', 55, (d) => _futuro(d) ? '' : d.intervaloSuprimidoMin > 0 ? minutosParaHora(d.intervaloSuprimidoMin) : '',
                 cor: (_) => Colors.orange.shade800),
-            GridCol('Faltas', 60, (d) => d.faltaStr, cor: (d) => d.faltaMin > 0 ? Colors.red.shade700 : null),
-            GridCol('Saldo', 65, (d) => d.saldoStr,
-                cor: (d) => d.saldoMin > 0 ? Colors.green.shade700 : (d.saldoMin < 0 ? Colors.red.shade700 : null)),
-            GridCol('Ocorrência / Justificativa', 200, (d) => d.ocorrencia, flex: true),
+            GridCol('Faltas', 60, (d) => _futuro(d) ? '' : d.faltaStr, cor: (d) => _futuro(d) ? null : d.faltaMin > 0 ? Colors.red.shade700 : null),
+            GridCol('Saldo', 65, (d) => _futuro(d) ? '' : d.saldoStr,
+                cor: (d) => _futuro(d) ? null : d.saldoMin > 0 ? Colors.green.shade700 : (d.saldoMin < 0 ? Colors.red.shade700 : null)),
+            GridCol('Ocorrência / Justificativa', 200, (d) => _futuro(d) ? '' : d.ocorrencia, flex: true),
           ],
         ),
       ),

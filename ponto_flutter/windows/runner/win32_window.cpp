@@ -208,6 +208,10 @@ Win32Window::MessageHandler(HWND hwnd,
     }
 
     case WM_ACTIVATE:
+      // Ao voltar pelo Alt+Tab com a janela minimizada, restaura-a.
+      if (LOWORD(wparam) != WA_INACTIVE && IsIconic(hwnd)) {
+        ShowWindow(hwnd, SW_RESTORE);
+      }
       if (child_content_ != nullptr) {
         SetFocus(child_content_);
       }
