@@ -1,4 +1,4 @@
-unit uFrmLogin;
+﻿unit uFrmLogin;
 
 {
   Login do sistema (usuários de TB_USUARIO do ERP).
