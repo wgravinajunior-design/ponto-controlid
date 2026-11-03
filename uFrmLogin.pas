@@ -37,6 +37,8 @@ type
     procedure btnServidorClick(Sender: TObject);
     procedure btnTestarClick(Sender: TObject);
     procedure FormShow(Sender: TObject);
+  protected
+    procedure CreateParams(var Params: TCreateParams); override;
   public
     constructor CreateLogin(AOwner: TComponent);
     property UsuarioNome: string read FUsuarioNome;
@@ -50,6 +52,13 @@ implementation
 
 uses
   uConfig, uDataModule;
+
+procedure TfrmLogin.CreateParams(var Params: TCreateParams);
+begin
+  inherited;
+  // Botão próprio na barra de tarefas: com a janela minimizada, o Alt+Tab consegue restaurá-la
+  Params.ExStyle := Params.ExStyle or WS_EX_APPWINDOW;
+end;
 
 const
   COR_FUNDO = $002A221C;

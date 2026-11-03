@@ -82,6 +82,8 @@ type
     procedure skFecharClick(Sender: TObject);
     procedure FormClose(Sender: TObject; var Action: TCloseAction);
     procedure FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+  protected
+    procedure CreateParams(var Params: TCreateParams); override;
   public
     constructor CreateTerminal(AOwner: TComponent; ALog: TLogCallback; AOnBatidaRegistrada: TProc);
     destructor Destroy; override;
@@ -97,6 +99,13 @@ function TerminalPontoAberto: Boolean;
 function AguardarLeitorLivre(ATimeoutMs: Cardinal = 15000): Boolean;
 
 implementation
+
+procedure TfrmTerminalPonto.CreateParams(var Params: TCreateParams);
+begin
+  inherited;
+  // Botão próprio na barra de tarefas: com a janela minimizada, o Alt+Tab consegue restaurá-la
+  Params.ExStyle := Params.ExStyle or WS_EX_APPWINDOW;
+end;
 
 const
   COR_FUNDO     = $002A221C;

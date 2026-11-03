@@ -3268,7 +3268,7 @@ end;
 
 procedure TfrmMain.PreencherGridEspelho(AEspelho: TEspelhoPonto);
 var
-  I: Integer;
+  I, C: Integer;
 begin
   if AEspelho = nil then
     Exit;
@@ -3290,6 +3290,11 @@ begin
     grdEspelho.Cells[10, I + 1] := AEspelho.Dias[I].FaltaStr;
     grdEspelho.Cells[11, I + 1] := AEspelho.Dias[I].SaldoStr;
     grdEspelho.Cells[12, I + 1] := AEspelho.Dias[I].Ocorrencia;
+
+    // Dias depois de hoje aparecem na grade, mas sem informações
+    if AEspelho.Dias[I].Data > Date then
+      for C := 2 to 12 do
+        grdEspelho.Cells[C, I + 1] := '';
   end;
 
   lblCardEsp1Val.Caption := AEspelho.Resumo.TotalPrevistoStr;
