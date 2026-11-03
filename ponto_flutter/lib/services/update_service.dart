@@ -86,14 +86,21 @@ class UpdateService {
     return info.latestVersion.isEmpty ? null : info;
   }
 
-  /// Consulta a última release; devolve a atualização se houver versão (ou build) mais nova.
+  /// Tags das releases deste aplicativo ("v2.0.0-b3"); as do sistema Delphi ("v1.0.3") ficam de fora.
+  static final _tagApp = RegExp(r'^v[\d.]+-b\d+$');
+
+  /// Consulta a última release deste aplicativo; devolve a atualização se houver versão (ou build) mais nova.
+  /// O repositório também publica as releases do sistema Delphi, por isso não se usa "releases/latest".
   static Future<UpdateInfo?> checarAtualizacao() async {
     try {
       final resp = await http
-          .get(Uri.parse('$_api/repos/$githubOwner/$githubRepo/releases/latest'), headers: _headers)
+          .get(Uri.parse('$_api/repos/$githubOwner/$githubRepo/releases?per_page=30'), headers: _headers)
           .timeout(const Duration(seconds: 10));
       if (resp.statusCode != 200) return null;
-      final info = _interpretar(jsonDecode(utf8.decode(resp.bodyBytes)) as Map<String, dynamic>);
+      final ultima = (jsonDecode(utf8.decode(resp.bodyBytes)) as List).whereType<Map<String, dynamic>>().where((r) =>
+          r['draft'] != true && r['prerelease'] != true && _tagApp.hasMatch('${r['tag_name'] ?? ''}'));
+      if (ultima.isEmpty) return null;
+      final info = _interpretar(ultima.first);
       if (info == null || info.downloadUrl.isEmpty) return null;
       final cmp = compararVersoes(info.latestVersion, buildVersion);
       info.hasUpdate = cmp > 0 || (cmp == 0 && info.latestBuild > buildNumber);
