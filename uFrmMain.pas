@@ -250,6 +250,8 @@ type
     edtHorSabEntrada1: TEdit;
     lblHorSabSaida1: TLabel;
     edtHorSabSaida1: TEdit;
+    lblHorSexSaida2: TLabel;
+    edtHorSexSaida2: TEdit;
     chkHorAtivo: TCheckBox;
     pnlHorarioBtns: TPanel;
     btnSalvarHorario: TButton;
@@ -2963,6 +2965,7 @@ begin
   chkHorTrabalhaSab.Checked := False;
   edtHorSabEntrada1.Text := '08:00';
   edtHorSabSaida1.Text := '12:00';
+  edtHorSexSaida2.Text := '';
   chkHorAtivo.Checked := True;
   if edtHorDescricao.CanFocus then
     edtHorDescricao.SetFocus;
@@ -3029,6 +3032,11 @@ begin
   else
     edtHorSabSaida1.Text := '12:00';
 
+  if AQry.FindField('HOR_SEX_SAIDA_2') <> nil then
+    edtHorSexSaida2.Text := Copy(AQry.FieldByName('HOR_SEX_SAIDA_2').AsString, 1, 5)
+  else
+    edtHorSexSaida2.Text := '';
+
   if AQry.FindField('HOR_ATIVO') <> nil then
     chkHorAtivo.Checked := SameText(AQry.FieldByName('HOR_ATIVO').AsString, 'S')
   else
@@ -3055,7 +3063,7 @@ end;
 
 procedure TfrmMain.btnSalvarHorarioClick(Sender: TObject);
 var
-  Desc, E1, S1, E2, S2, SE1, SS1: string;
+  Desc, E1, S1, E2, S2, SE1, SS1, XS2: string;
   Tol, Carga: Integer;
   CompSab, TrabSab, Ativo: Boolean;
   NovoId: Integer;
@@ -3078,11 +3086,12 @@ begin
   TrabSab := chkHorTrabalhaSab.Checked;
   SE1 := Trim(edtHorSabEntrada1.Text);
   SS1 := Trim(edtHorSabSaida1.Text);
+  XS2 := Trim(edtHorSexSaida2.Text);
   Ativo := chkHorAtivo.Checked;
 
   Screen.Cursor := crHourGlass;
   try
-    NovoId := dmDados.SalvarHorario(FSelectedHorarioId, Desc, E1, S1, E2, S2, Tol, Carga, CompSab, TrabSab, SE1, SS1, Ativo);
+    NovoId := dmDados.SalvarHorario(FSelectedHorarioId, Desc, E1, S1, E2, S2, Tol, Carga, CompSab, TrabSab, SE1, SS1, Ativo, XS2);
     FSelectedHorarioId := NovoId;
     LogMessage(Format('💾 Jornada [%s] (ID %d) salva com sucesso.', [Desc, NovoId]));
     CarregarHorarios;
@@ -3095,7 +3104,7 @@ end;
 
 procedure TfrmMain.btnSalvarEnviarHorarioClick(Sender: TObject);
 var
-  Desc, E1, S1, E2, S2, SE1, SS1: string;
+  Desc, E1, S1, E2, S2, SE1, SS1, XS2: string;
   Tol, Carga: Integer;
   CompSab, TrabSab, Ativo: Boolean;
   NovoId: Integer;
@@ -3120,12 +3129,13 @@ begin
   TrabSab := chkHorTrabalhaSab.Checked;
   SE1 := Trim(edtHorSabEntrada1.Text);
   SS1 := Trim(edtHorSabSaida1.Text);
+  XS2 := Trim(edtHorSexSaida2.Text);
   Ativo := chkHorAtivo.Checked;
 
   Screen.Cursor := crHourGlass;
   try
     // 1. Salvar no banco Firebird local
-    NovoId := dmDados.SalvarHorario(FSelectedHorarioId, Desc, E1, S1, E2, S2, Tol, Carga, CompSab, TrabSab, SE1, SS1, Ativo);
+    NovoId := dmDados.SalvarHorario(FSelectedHorarioId, Desc, E1, S1, E2, S2, Tol, Carga, CompSab, TrabSab, SE1, SS1, Ativo, XS2);
     FSelectedHorarioId := NovoId;
     LogMessage(Format('💾 Jornada [%s] (ID %d) salva com sucesso no banco de dados.', [Desc, NovoId]));
     CarregarHorarios;

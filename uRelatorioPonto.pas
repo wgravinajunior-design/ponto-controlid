@@ -196,7 +196,9 @@ begin
         DoDia.Clear;
         if Lista <> nil then
           for B in Lista do
-            if Trunc(B.DataHora) = Dia then
+            // ignora leitura repetida (< 10 min da anterior), igual ao espelho
+            if (Trunc(B.DataHora) = Dia) and ((DoDia.Count = 0) or
+               (MinutesBetween(B.DataHora, DoDia[DoDia.Count - 1].DataHora) >= 10)) then
               DoDia.Add(B);
 
         // Horas pelos pares Entrada/Saída do dia

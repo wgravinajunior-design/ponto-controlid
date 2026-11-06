@@ -342,6 +342,31 @@ var
   Diff, AbonoMin: Integer;
   TemJus: Boolean;
   JusTipo, JusMotivo: string;
+  CargaSextaMin: Integer;
+  Filtradas: TArray<TDateTime>;
+  Feriados: TStringList;
+  FeriadoDesc: string;
+
+  function MinCampo(AQry: TFDQuery; const ACampo: string): Integer;
+  var
+    F: TField;
+  begin
+    Result := -1;
+    F := AQry.FindField(ACampo);
+    if (F <> nil) and (not F.IsNull) then
+      Result := Round(Frac(F.AsDateTime) * 1440);
+  end;
+
+  // Carga em minutos a partir dos horários (Entrada/Saída almoço/Volta/Saída)
+  function CargaPorHorarios(E1, S1, E2, S2: Integer): Integer;
+  begin
+    Result := 0;
+    if (E1 >= 0) and (S1 > E1) then
+      Inc(Result, S1 - E1);
+    if (E2 >= 0) and (S2 > E2) then
+      Inc(Result, S2 - E2);
+  end;
+
 begin
   Espelho := TEspelhoPonto.Create;
   Result := Espelho;
@@ -377,6 +402,7 @@ begin
   TrabalhaSabado := False;
   SabCargaMin := 240;
   HorarioDesc := 'Comercial 44h (Padrao)';
+  CargaSextaMin := -1;
 
   QryHorario := dmDados.GetHorarioPorId(HorId);
   try
@@ -389,6 +415,27 @@ begin
       if CargaDiariaMin <= 0 then CargaDiariaMin := 528;
       CompensaSabado := (QryHorario.FieldByName('HOR_COMPENSA_SABADO').AsString = 'S');
       TrabalhaSabado := (QryHorario.FieldByName('HOR_TRABALHA_SABADO').AsString = 'S');
+
+      // Carga diária derivada dos horários cadastrados (seg-qui) e da saída
+      // diferenciada da sexta-feira. Ex.: 08-12/13-18 = 9h; sexta até 17h = 8h.
+      var E1 := MinCampo(QryHorario, 'HOR_ENTRADA_1');
+      var S1 := MinCampo(QryHorario, 'HOR_SAIDA_1');
+      var E2 := MinCampo(QryHorario, 'HOR_ENTRADA_2');
+      var S2 := MinCampo(QryHorario, 'HOR_SAIDA_2');
+      var XS2 := MinCampo(QryHorario, 'HOR_SEX_SAIDA_2');
+      if CargaPorHorarios(E1, S1, E2, S2) > 0 then
+        CargaDiariaMin := CargaPorHorarios(E1, S1, E2, S2);
+      if XS2 >= 0 then
+      begin
+        if S2 >= 0 then
+          CargaSextaMin := CargaPorHorarios(E1, S1, E2, XS2)
+        else
+          CargaSextaMin := CargaPorHorarios(E1, XS2, -1, -1);
+      end;
+      if CargaPorHorarios(MinCampo(QryHorario, 'HOR_SAB_ENTRADA_1'),
+        MinCampo(QryHorario, 'HOR_SAB_SAIDA_1'), -1, -1) > 0 then
+        SabCargaMin := CargaPorHorarios(MinCampo(QryHorario, 'HOR_SAB_ENTRADA_1'),
+          MinCampo(QryHorario, 'HOR_SAB_SAIDA_1'), -1, -1);
     end;
   finally
     QryHorario.Free;
@@ -400,6 +447,33 @@ begin
 
   // 4. Obter Justificativas no Periodo
   QryJus := dmDados.GetJustificativasPeriodo(APessoaId, ADataIni, ADataFim);
+
+  // 5. Feriados (tabela cadastrada pelo módulo de feriados; chave 'dd/mm' para
+  //    recorrentes e 'dd/mm/yyyy' para datas fixas)
+  Feriados := TStringList.Create;
+  try
+    var QryFer := TFDQuery.Create(nil);
+    try
+      QryFer.Connection := dmDados.FDConnection;
+      QryFer.SQL.Text :=
+        'SELECT FER_DATA, FER_DESCRICAO, COALESCE(FER_RECORRENTE, ''S'') AS REC FROM TB_PONTO_FERIADO';
+      QryFer.Open;
+      while not QryFer.Eof do
+      begin
+        if QryFer.FieldByName('REC').AsString = 'S' then
+          Feriados.Values[FormatDateTime('dd/mm', QryFer.FieldByName('FER_DATA').AsDateTime)] :=
+            QryFer.FieldByName('FER_DESCRICAO').AsString
+        else
+          Feriados.Values[FormatDateTime('dd/mm/yyyy', QryFer.FieldByName('FER_DATA').AsDateTime)] :=
+            QryFer.FieldByName('FER_DESCRICAO').AsString;
+        QryFer.Next;
+      end;
+    finally
+      QryFer.Free;
+    end;
+  except
+    // Banco sem a tabela de feriados: segue sem considerar feriados
+  end;
 
   TotalDias := 0;
   TotalUteis := 0;
@@ -455,8 +529,30 @@ begin
           end;
           DiaItem.TipoDia := tdUtil;
           DiaItem.CargaPrevistaMin := CargaDiariaMin;
+          if (DayOfWeek(DataCur) = 6) and (CargaSextaMin > 0) then
+            DiaItem.CargaPrevistaMin := CargaSextaMin;
           Inc(TotalUteis);
         end;
+      end;
+
+      // Feriado: sem carga prevista (horas trabalhadas viram extra)
+      FeriadoDesc := Feriados.Values[FormatDateTime('dd/mm/yyyy', DataCur)];
+      if FeriadoDesc = '' then
+        FeriadoDesc := Feriados.Values[FormatDateTime('dd/mm', DataCur)];
+      if (FeriadoDesc <> '') and (DiaItem.CargaPrevistaMin > 0) then
+      begin
+        DiaItem.TipoDia := tdFeriado;
+        DiaItem.CargaPrevistaMin := 0;
+        DiaItem.Ocorrencia := 'Feriado (' + FeriadoDesc + ')';
+        Dec(TotalUteis);
+      end;
+
+      // Dias futuros não têm carga nem falta (antes inflavam o resumo)
+      if DataCur > Date then
+      begin
+        if DiaItem.CargaPrevistaMin > 0 then
+          Dec(TotalUteis);
+        DiaItem.CargaPrevistaMin := 0;
       end;
 
       // Filtrar batidas do dia
@@ -484,6 +580,18 @@ begin
             Result := CompareDateTime(L, R);
           end));
       end;
+
+      // Descarta leituras repetidas (menos de 10 min da anterior), que
+      // deslocariam os pares Entrada/Saída e distorceriam as horas.
+      SetLength(Filtradas, 0);
+      for I := 0 to High(BatidasDia) do
+        if (Length(Filtradas) = 0) or
+           (MinutesBetween(BatidasDia[I], Filtradas[High(Filtradas)]) >= 10) then
+        begin
+          SetLength(Filtradas, Length(Filtradas) + 1);
+          Filtradas[High(Filtradas)] := BatidasDia[I];
+        end;
+      BatidasDia := Filtradas;
 
       NumBatidas := Length(BatidasDia);
       if NumBatidas > 0 then
@@ -576,12 +684,19 @@ begin
       end;
 
       // Caso dia util sem marcacao e sem justificativa -> Falta Total
-      if (DiaItem.CargaPrevistaMin > 0) and (NumBatidas = 0) and (not TemJus) then
+      // (hoje sem batidas ainda não é falta: o expediente pode não ter começado)
+      if (DiaItem.CargaPrevistaMin > 0) and (NumBatidas = 0) and (not TemJus) and
+         (DataCur < Date) then
       begin
         DiaItem.FaltaMin := DiaItem.CargaPrevistaMin;
         DiaItem.Ocorrencia := 'Falta Nao Justificada';
         Inc(TotalFalt);
       end;
+
+      // Hoje, com expediente ainda em andamento (sem batida ou batida ímpar),
+      // não lança falta parcial: ela só é apurada depois que o dia termina.
+      if (DataCur = Date) and ((NumBatidas = 0) or Odd(NumBatidas)) then
+        DiaItem.FaltaMin := 0;
 
       // Saldo do dia
       DiaItem.SaldoMin := DiaItem.ExtraMin - DiaItem.FaltaMin;
@@ -601,6 +716,7 @@ begin
   finally
     QryMarcacoes.Free;
     QryJus.Free;
+    Feriados.Free;
   end;
 
   // Atualizar Resumo Final

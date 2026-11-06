@@ -2638,6 +2638,21 @@ object frmMain: TfrmMain
           TabOrder = 10
           Text = '12:00'
         end
+        object lblHorSexSaida2: TLabel
+          Left = 200
+          Top = 277
+          Width = 150
+          Height = 15
+          Caption = 'Sa'#237'da na Sexta-feira'
+        end
+        object edtHorSexSaida2: TEdit
+          Left = 365
+          Top = 273
+          Width = 95
+          Height = 23
+          TabOrder = 13
+          TextHint = 'igual'
+        end
         object chkHorAtivo: TCheckBox
           Left = 20
           Top = 275

@@ -74,14 +74,20 @@ type
     function GetDigitaisCadastradas: TDigitaisCadastradas;
     function GetTotalBiometrias(out ATotal: Integer): Boolean;
     function RegistrarBatidaBiometrica(APessoaId: Integer; ADataHora: TDateTime;
-      AIntervaloMinimoMin: Integer; out ATipoBatida: string; out AUltimaBatida: TDateTime): TResultadoBatida;
+      AIntervaloMinimoMin: Integer; out ATipoBatida, ADescricaoBatida: string;
+      out AUltimaBatida: TDateTime): TResultadoBatida;
+    // Horários previstos (em minutos do dia) para a jornada do colaborador na data.
+    // Retorna [Entrada, Saída almoço, Volta almoço, Saída] (ou menos, se a jornada não tiver intervalo).
+    function GetSlotsPrevistos(APessoaId: Integer; AData: TDateTime): TArray<Integer>;
+    // Corrige o tipo (E/S) de uma batida biométrica recém-registrada no terminal
+    function CorrigirTipoBatida(APessoaId: Integer; ADataHora: TDateTime; const ATipo: string): Boolean;
 
     // Horários / Jornadas de Trabalho
     function GetHorarios(const AApenasAtivos: Boolean = True): TFDQuery;
     function GetHorarioPorId(AId: Integer): TFDQuery;
     function SalvarHorario(AId: Integer; const ADescricao, AEnt1, ASai1, AEnt2, ASai2: string;
       AToleranciaMin, ACargaDiariaMin: Integer; ACompensaSab, ATrabalhaSab: Boolean;
-      const ASabEnt1, ASabSai1: string; AAtivo: Boolean): Integer;
+      const ASabEnt1, ASabSai1: string; AAtivo: Boolean; const ASexSai2: string = ''): Integer;
     function ExcluirHorario(AId: Integer; out AErro: string): Boolean;
 
     // Justificativas / Ocorrências (Portaria 671)
@@ -819,15 +825,168 @@ begin
   end;
 end;
 
-function TdmDados.RegistrarBatidaBiometrica(APessoaId: Integer; ADataHora: TDateTime;
-  AIntervaloMinimoMin: Integer; out ATipoBatida: string; out AUltimaBatida: TDateTime): TResultadoBatida;
+function TdmDados.CorrigirTipoBatida(APessoaId: Integer; ADataHora: TDateTime;
+  const ATipo: string): Boolean;
 var
   Qry: TFDQuery;
-  QtdHoje: Integer;
+begin
+  Result := False;
+  FLastError := '';
+  if not IsConectado then
+    Conectar;
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      Qry.SQL.Text :=
+        'UPDATE TB_PONTO_MARCACAO SET PMA_TIPO_BATIDA = :TIPO ' +
+        'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA = :DH AND PMA_ORIGEM = ''B''';
+      Qry.ParamByName('TIPO').AsString := ATipo;
+      Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+      Qry.ParamByName('DH').AsDateTime := RecodeMilliSecond(ADataHora, 0);
+      Qry.ExecSQL;
+      Result := Qry.RowsAffected > 0;
+    except
+      on E: Exception do
+        FLastError := 'Erro ao corrigir o tipo da batida: ' + E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetSlotsPrevistos(APessoaId: Integer; AData: TDateTime): TArray<Integer>;
+var
+  Qry: TFDQuery;
+
+  function Min(const ACampo: string): Integer;
+  var
+    F: TField;
+  begin
+    Result := -1;
+    F := Qry.FindField(ACampo);
+    if (F <> nil) and (not F.IsNull) then
+      Result := Round(Frac(F.AsDateTime) * 1440);
+  end;
+
+  procedure Add(AMin: Integer);
+  begin
+    if AMin >= 0 then
+    begin
+      SetLength(Result, Length(Result) + 1);
+      Result[High(Result)] := AMin;
+    end;
+  end;
+
+var
+  E1, S1, E2, S2: Integer;
+begin
+  SetLength(Result, 0);
+  if not IsConectado then
+    Conectar;
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      Qry.SQL.Text :=
+        'SELECT H.* FROM TB_COLABORADOR C ' +
+        'JOIN TB_PONTO_HORARIO H ON H.HOR_ID = COALESCE(NULLIF(C.COL_HORARIO, 0), 1) ' +
+        'WHERE C.COL_PESSOA = :PESSOA';
+      Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+      Qry.Open;
+      if Qry.IsEmpty then
+        Exit;
+
+      case DayOfWeek(AData) of
+        1: Exit; // Domingo: sem jornada prevista
+        7:
+          begin
+            if not SameText(Qry.FieldByName('HOR_TRABALHA_SABADO').AsString, 'S') then
+              Exit;
+            Add(Min('HOR_SAB_ENTRADA_1'));
+            Add(Min('HOR_SAB_SAIDA_1'));
+            Exit;
+          end;
+      end;
+
+      E1 := Min('HOR_ENTRADA_1');
+      S1 := Min('HOR_SAIDA_1');
+      E2 := Min('HOR_ENTRADA_2');
+      S2 := Min('HOR_SAIDA_2');
+      // Sexta-feira com horário de saída diferenciado
+      if (DayOfWeek(AData) = 6) and (Min('HOR_SEX_SAIDA_2') >= 0) then
+      begin
+        if S2 >= 0 then
+          S2 := Min('HOR_SEX_SAIDA_2')
+        else
+          S1 := Min('HOR_SEX_SAIDA_2');
+      end;
+      Add(E1);
+      Add(S1);
+      Add(E2);
+      Add(S2);
+    except
+      SetLength(Result, 0);
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.RegistrarBatidaBiometrica(APessoaId: Integer; ADataHora: TDateTime;
+  AIntervaloMinimoMin: Integer; out ATipoBatida, ADescricaoBatida: string;
+  out AUltimaBatida: TDateTime): TResultadoBatida;
+const
+  // Duas leituras do mesmo colaborador em menos de 10 minutos são tratadas como
+  // repetição (o colaborador encostou o dedo de novo para "confirmar"). Antes uma
+  // leitura dupla na saída do almoço invertia todas as batidas seguintes do dia.
+  JANELA_REPETICAO_MIN = 10;
+var
+  Qry: TFDQuery;
   Cpf, Pis: string;
+  Batidas: TArray<TDateTime>;
+  Slots: TArray<Integer>;
+  Janela, Idx, I: Integer;
+
+  // Define a posição da batida na jornada (0=Entrada, 1=Saída almoço,
+  // 2=Volta almoço, 3=Saída). Segue a sequência do dia, mas se a batida estiver
+  // mais perto do horário seguinte (ex.: esqueceu de bater a saída do almoço),
+  // pula para ele — mantendo Entrada/Saída coerentes com a jornada.
+  function ProximoSlot(AAnterior: Integer; AMomento: TDateTime): Integer;
+  var
+    M, Seq, Pula: Integer;
+  begin
+    Result := AAnterior + 1;
+    if (Length(Slots) < 4) or (Result < 1) or (Result + 1 > 3) then
+      Exit;
+    M := Round(Frac(AMomento) * 1440);
+    Seq := Abs(M - Slots[Result]);
+    Pula := Abs(M - Slots[Result + 1]);
+    if Pula < Seq then
+      Result := Result + 1;
+  end;
+
+  function Descricao(ASlot: Integer): string;
+  begin
+    if Length(Slots) >= 4 then
+      case ASlot of
+        0: Exit('ENTRADA');
+        1: Exit('SAÍDA ALMOÇO');
+        2: Exit('VOLTA ALMOÇO');
+        3: Exit('SAÍDA');
+      end;
+    if not Odd(ASlot) then
+      Result := 'ENTRADA'
+    else
+      Result := 'SAÍDA';
+    if (ASlot > 3) or ((Length(Slots) > 0) and (ASlot >= Length(Slots))) then
+      Result := Result + ' EXTRA';
+  end;
+
 begin
   Result := rbErro;
   ATipoBatida := '';
+  ADescricaoBatida := '';
   AUltimaBatida := 0;
   FLastError := '';
   if not IsConectado then
@@ -838,34 +997,49 @@ begin
     try
       Qry.Connection := FDConnection;
 
-      // Batidas do dia: quantidade define Entrada (par) ou Saída (ímpar)
       Qry.SQL.Text :=
-        'SELECT COUNT(*) AS QTD, MAX(PMA_DATA_HORA) AS ULTIMA FROM TB_PONTO_MARCACAO ' +
-        'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM';
+        'SELECT PMA_DATA_HORA FROM TB_PONTO_MARCACAO ' +
+        'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' +
+        'ORDER BY PMA_DATA_HORA';
       Qry.ParamByName('PESSOA').AsInteger := APessoaId;
       Qry.ParamByName('INI').AsDateTime := StartOfTheDay(ADataHora);
       Qry.ParamByName('FIM').AsDateTime := EndOfTheDay(ADataHora);
       Qry.Open;
-      QtdHoje := Qry.FieldByName('QTD').AsInteger;
-      if not Qry.FieldByName('ULTIMA').IsNull then
-        AUltimaBatida := Qry.FieldByName('ULTIMA').AsDateTime;
+      SetLength(Batidas, 0);
+      while not Qry.Eof do
+      begin
+        SetLength(Batidas, Length(Batidas) + 1);
+        Batidas[High(Batidas)] := Qry.FieldByName('PMA_DATA_HORA').AsDateTime;
+        Qry.Next;
+      end;
       Qry.Close;
+      if Length(Batidas) > 0 then
+        AUltimaBatida := Batidas[High(Batidas)];
 
-      if Odd(QtdHoje) then
+      Slots := GetSlotsPrevistos(APessoaId, ADataHora);
+
+      // Reconstrói a posição de cada batida já feita no dia
+      Idx := -1;
+      for I := 0 to High(Batidas) do
+        Idx := ProximoSlot(Idx, Batidas[I]);
+
+      // Leitura repetida em sequência (colaborador encostou o dedo duas vezes)
+      Janela := AIntervaloMinimoMin;
+      if Janela < JANELA_REPETICAO_MIN then
+        Janela := JANELA_REPETICAO_MIN;
+      if (AUltimaBatida > 0) and (MinutesBetween(ADataHora, AUltimaBatida) < Janela) then
+      begin
+        ADescricaoBatida := Descricao(Idx);
+        if Odd(Idx) then ATipoBatida := 'S' else ATipoBatida := 'E';
+        Exit(rbRepetida);
+      end;
+
+      Idx := ProximoSlot(Idx, ADataHora);
+      ADescricaoBatida := Descricao(Idx);
+      if Odd(Idx) then
         ATipoBatida := 'S'
       else
         ATipoBatida := 'E';
-
-      // Leitura repetida em sequência (colaborador encostou o dedo duas vezes)
-      if (AUltimaBatida > 0) and (AIntervaloMinimoMin > 0) and
-         (MinutesBetween(ADataHora, AUltimaBatida) < AIntervaloMinimoMin) then
-      begin
-        if Odd(QtdHoje) then
-          ATipoBatida := 'E'
-        else
-          ATipoBatida := 'S';
-        Exit(rbRepetida);
-      end;
 
       Qry.SQL.Text := 'SELECT COL_CPF, COL_PIS FROM TB_COLABORADOR WHERE COL_PESSOA = :PESSOA';
       Qry.ParamByName('PESSOA').AsInteger := APessoaId;
@@ -1303,7 +1477,7 @@ begin
   Qry.Connection := FDConnection;
   SQL := 'SELECT HOR_ID, HOR_DESCRICAO, HOR_ENTRADA_1, HOR_SAIDA_1, HOR_ENTRADA_2, HOR_SAIDA_2, ' +
          'HOR_TOLERANCIA_MIN, HOR_CARGA_DIARIA_MIN, HOR_COMPENSA_SABADO, HOR_TRABALHA_SABADO, ' +
-         'HOR_SAB_ENTRADA_1, HOR_SAB_SAIDA_1, HOR_ATIVO ' +
+         'HOR_SAB_ENTRADA_1, HOR_SAB_SAIDA_1, HOR_SEX_SAIDA_2, HOR_ATIVO ' +
          'FROM TB_PONTO_HORARIO ';
   if AApenasAtivos then
     SQL := SQL + 'WHERE COALESCE(HOR_ATIVO, ''S'') = ''S'' ';
@@ -1326,7 +1500,7 @@ begin
   Qry.SQL.Text :=
     'SELECT HOR_ID, HOR_DESCRICAO, HOR_ENTRADA_1, HOR_SAIDA_1, HOR_ENTRADA_2, HOR_SAIDA_2, ' +
     'HOR_TOLERANCIA_MIN, HOR_CARGA_DIARIA_MIN, HOR_COMPENSA_SABADO, HOR_TRABALHA_SABADO, ' +
-    'HOR_SAB_ENTRADA_1, HOR_SAB_SAIDA_1, HOR_ATIVO ' +
+    'HOR_SAB_ENTRADA_1, HOR_SAB_SAIDA_1, HOR_SEX_SAIDA_2, HOR_ATIVO ' +
     'FROM TB_PONTO_HORARIO WHERE HOR_ID = :ID';
   Qry.ParamByName('ID').AsInteger := AId;
   Qry.Open;
@@ -1335,7 +1509,7 @@ end;
 
 function TdmDados.SalvarHorario(AId: Integer; const ADescricao, AEnt1, ASai1, AEnt2, ASai2: string;
   AToleranciaMin, ACargaDiariaMin: Integer; ACompensaSab, ATrabalhaSab: Boolean;
-  const ASabEnt1, ASabSai1: string; AAtivo: Boolean): Integer;
+  const ASabEnt1, ASabSai1: string; AAtivo: Boolean; const ASexSai2: string): Integer;
 var
   Qry: TFDQuery;
   AtivoStr, CompSabStr, TrabSabStr: string;
@@ -1373,8 +1547,8 @@ begin
       Qry.SQL.Text :=
         'INSERT INTO TB_PONTO_HORARIO (HOR_DESCRICAO, HOR_ENTRADA_1, HOR_SAIDA_1, HOR_ENTRADA_2, HOR_SAIDA_2, ' +
         'HOR_TOLERANCIA_MIN, HOR_CARGA_DIARIA_MIN, HOR_COMPENSA_SABADO, HOR_TRABALHA_SABADO, ' +
-        'HOR_SAB_ENTRADA_1, HOR_SAB_SAIDA_1, HOR_ATIVO) ' +
-        'VALUES (:DESC, :E1, :S1, :E2, :S2, :TOL, :CARGA, :CSAB, :TSAB, :SE1, :SS1, :ATIVO) ' +
+        'HOR_SAB_ENTRADA_1, HOR_SAB_SAIDA_1, HOR_SEX_SAIDA_2, HOR_ATIVO) ' +
+        'VALUES (:DESC, :E1, :S1, :E2, :S2, :TOL, :CARGA, :CSAB, :TSAB, :SE1, :SS1, :XS2, :ATIVO) ' +
         'RETURNING HOR_ID';
       Qry.ParamByName('DESC').AsString := Trim(ADescricao);
       BindTime('E1', AEnt1);
@@ -1387,6 +1561,7 @@ begin
       Qry.ParamByName('TSAB').AsString := TrabSabStr;
       BindTime('SE1', ASabEnt1);
       BindTime('SS1', ASabSai1);
+      BindTime('XS2', ASexSai2);
       Qry.ParamByName('ATIVO').AsString := AtivoStr;
       Qry.Open;
       if not Qry.IsEmpty then
@@ -1400,7 +1575,7 @@ begin
         'HOR_ENTRADA_2 = :E2, HOR_SAIDA_2 = :S2, HOR_TOLERANCIA_MIN = :TOL, ' +
         'HOR_CARGA_DIARIA_MIN = :CARGA, HOR_COMPENSA_SABADO = :CSAB, ' +
         'HOR_TRABALHA_SABADO = :TSAB, HOR_SAB_ENTRADA_1 = :SE1, ' +
-        'HOR_SAB_SAIDA_1 = :SS1, HOR_ATIVO = :ATIVO ' +
+        'HOR_SAB_SAIDA_1 = :SS1, HOR_SEX_SAIDA_2 = :XS2, HOR_ATIVO = :ATIVO ' +
         'WHERE HOR_ID = :ID';
       Qry.ParamByName('DESC').AsString := Trim(ADescricao);
       BindTime('E1', AEnt1);
@@ -1413,6 +1588,7 @@ begin
       Qry.ParamByName('TSAB').AsString := TrabSabStr;
       BindTime('SE1', ASabEnt1);
       BindTime('SS1', ASabSai1);
+      BindTime('XS2', ASexSai2);
       Qry.ParamByName('ATIVO').AsString := AtivoStr;
       Qry.ParamByName('ID').AsInteger := AId;
       Qry.ExecSQL;
@@ -2030,6 +2206,7 @@ begin
       '  HOR_TRABALHA_SABADO CHAR(1) DEFAULT ''N'', ' +
       '  HOR_SAB_ENTRADA_1 TIME, ' +
       '  HOR_SAB_SAIDA_1 TIME, ' +
+      '  HOR_SEX_SAIDA_2 TIME, ' +
       '  HOR_ATIVO CHAR(1) DEFAULT ''S''' +
       ')');
     Alterou := True;
@@ -2044,6 +2221,8 @@ begin
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_COMPENSA_SABADO CHAR(1) DEFAULT ''S''');
     if not CampoExiste('TB_PONTO_HORARIO', 'HOR_TRABALHA_SABADO') then
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_TRABALHA_SABADO CHAR(1) DEFAULT ''N''');
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_SEX_SAIDA_2') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_SEX_SAIDA_2 TIME');
     if not CampoExiste('TB_PONTO_HORARIO', 'HOR_ATIVO') then
       ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_ATIVO CHAR(1) DEFAULT ''S''');
   end;

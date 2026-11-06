@@ -67,8 +67,19 @@ type
     skFechar: TSkModernButton;
     tmrRelogio: TTimer;
     tmrVoltar: TTimer;
+    pnlCorrecao: TPanel;
+    lblCorrecao: TLabel;
+    skTipo: array[1..4] of TSkModernButton;
+
+    // Batida recém-registrada que ainda pode ter o tipo corrigido (F1..F4)
+    FCorrAtiva: Boolean;
+    FCorrPessoaId: Integer;
+    FCorrMomento: TDateTime;
+    FCorrNome: string;
 
     procedure MontarTela;
+    procedure CorrigirTipo(AOpcao: Integer);
+    procedure skTipoClick(Sender: TObject);
     procedure IniciarLeitura;
     procedure PararLeitura;
     procedure MostrarAguardando;
@@ -387,6 +398,34 @@ begin
   lblStatus := NovoLabel(pnlResultado, alTop, 60, 22, [fsBold], clWhite);
   lblNome := NovoLabel(pnlResultado, alTop, 60, 26, [fsBold], clWhite);
   lblNome.Top := lblStatus.Height;
+  // Correção rápida do tipo: aparece por alguns segundos após cada batida
+  pnlCorrecao := TPanel.Create(Self);
+  pnlCorrecao.Parent := pnlResultado;
+  pnlCorrecao.Align := alBottom;
+  pnlCorrecao.Height := 86;
+  pnlCorrecao.BevelOuter := bvNone;
+  pnlCorrecao.ParentBackground := True;
+  pnlCorrecao.Visible := False;
+
+  lblCorrecao := NovoLabel(pnlCorrecao, alTop, 28, 11, [], clWhite);
+  lblCorrecao.Caption := 'Tipo errado? Toque na opção correta ou use as teclas F1 a F4:';
+
+  for var K := 1 to 4 do
+  begin
+    skTipo[K] := TSkModernButton.Create(Self);
+    skTipo[K].Parent := pnlCorrecao;
+    skTipo[K].Tag := K;
+    skTipo[K].SetBounds(20 + (K - 1) * 225, 34, 210, 42);
+    skTipo[K].Kind := sbkDark;
+    skTipo[K].Radius := 10;
+    skTipo[K].FontSize := 11;
+    skTipo[K].OnClick := skTipoClick;
+  end;
+  skTipo[1].Caption := 'F1  Entrada';
+  skTipo[2].Caption := 'F2  Saída almoço';
+  skTipo[3].Caption := 'F3  Volta almoço';
+  skTipo[4].Caption := 'F4  Saída';
+
   lblDetalhe := NovoLabel(pnlResultado, alClient, 40, 16, [], clWhite);
 
   tmrRelogio := TTimer.Create(Self);
@@ -456,6 +495,9 @@ end;
 procedure TfrmTerminalPonto.MostrarAguardando;
 begin
   tmrVoltar.Enabled := False;
+  tmrVoltar.Interval := 4000;
+  FCorrAtiva := False;
+  pnlCorrecao.Visible := False;
   pnlResultado.Color := COR_AGUARDA;
   lblStatus.Caption := '👆 Posicione o dedo no leitor';
   lblNome.Caption := '';
@@ -488,21 +530,21 @@ var
   Tipo, TipoDesc: string;
   Ultima: TDateTime;
 begin
+  // Nova leitura encerra a correção da batida anterior
+  FCorrAtiva := False;
+  pnlCorrecao.Visible := False;
+  tmrVoltar.Interval := 4000;
   case dmDados.RegistrarBatidaBiometrica(ADigital.PessoaId, AMomento,
-    AppConfig.Relogio.IntervaloMinimoBatidaMin, Tipo, Ultima) of
+    AppConfig.Relogio.IntervaloMinimoBatidaMin, Tipo, TipoDesc, Ultima) of
     rbRegistrada:
       begin
-        if Tipo = 'E' then
-          TipoDesc := 'ENTRADA'
-        else
-          TipoDesc := 'SAÍDA';
         if Tipo = 'E' then
           MostrarResultado(COR_ENTRADA, '✅ ' + TipoDesc + ' registrada', ADigital.Nome,
             FormatDateTime('dd/mm/yyyy "às" hh:nn:ss', AMomento))
         else
           MostrarResultado(COR_SAIDA, '✅ ' + TipoDesc + ' registrada', ADigital.Nome,
             FormatDateTime('dd/mm/yyyy "às" hh:nn:ss', AMomento));
-        lstUltimas.Items.Insert(0, Format('%s   %-8s   %s',
+        lstUltimas.Items.Insert(0, Format('%s   %-13s   %s',
           [FormatDateTime('hh:nn:ss', AMomento), TipoDesc, ADigital.Nome]));
         while lstUltimas.Items.Count > 50 do
           lstUltimas.Items.Delete(lstUltimas.Items.Count - 1);
@@ -512,12 +554,20 @@ begin
             [ADigital.Nome, TipoDesc, FormatDateTime('hh:nn:ss', AMomento)]));
         if Assigned(FOnBatidaRegistrada) then
           FOnBatidaRegistrada();
+
+        // Abre a janela de correção do tipo por 7 segundos
+        FCorrAtiva := True;
+        FCorrPessoaId := ADigital.PessoaId;
+        FCorrMomento := AMomento;
+        FCorrNome := ADigital.Nome;
+        pnlCorrecao.Visible := True;
+        tmrVoltar.Interval := 7000;
       end;
     rbRepetida:
       begin
         MostrarResultado(COR_REPETIDA, 'ℹ️ Batida já registrada', ADigital.Nome,
-          Format('Última batida às %s. Aguarde %d minuto(s) entre uma batida e outra.',
-            [FormatDateTime('hh:nn:ss', Ultima), AppConfig.Relogio.IntervaloMinimoBatidaMin]));
+          Format('Última batida (%s) às %s. Leituras repetidas em menos de 10 minutos são ignoradas.',
+            [TipoDesc, FormatDateTime('hh:nn:ss', Ultima)]));
         MessageBeep(MB_ICONASTERISK);
       end;
   else
@@ -532,6 +582,9 @@ end;
 
 procedure TfrmTerminalPonto.ThreadNaoIdentificado;
 begin
+  FCorrAtiva := False;
+  pnlCorrecao.Visible := False;
+  tmrVoltar.Interval := 4000;
   MostrarResultado(COR_ERRO, '❌ Digital não reconhecida', '',
     'Tente novamente posicionando o dedo no centro do leitor.');
   MessageBeep(MB_ICONHAND);
@@ -563,10 +616,57 @@ begin
   Close;
 end;
 
+procedure TfrmTerminalPonto.CorrigirTipo(AOpcao: Integer);
+const
+  DESCRICOES: array[1..4] of string = ('ENTRADA', 'SAÍDA ALMOÇO', 'VOLTA ALMOÇO', 'SAÍDA');
+var
+  Tipo: string;
+begin
+  if not FCorrAtiva then
+    Exit;
+  if Odd(AOpcao) then Tipo := 'E' else Tipo := 'S';
+  if dmDados.CorrigirTipoBatida(FCorrPessoaId, FCorrMomento, Tipo) then
+  begin
+    if Tipo = 'E' then
+      MostrarResultado(COR_ENTRADA, '✅ ' + DESCRICOES[AOpcao] + ' registrada', FCorrNome,
+        FormatDateTime('dd/mm/yyyy "às" hh:nn:ss', FCorrMomento) + '  (corrigido)')
+    else
+      MostrarResultado(COR_SAIDA, '✅ ' + DESCRICOES[AOpcao] + ' registrada', FCorrNome,
+        FormatDateTime('dd/mm/yyyy "às" hh:nn:ss', FCorrMomento) + '  (corrigido)');
+    if lstUltimas.Items.Count > 0 then
+      lstUltimas.Items[0] := Format('%s   %-13s   %s',
+        [FormatDateTime('hh:nn:ss', FCorrMomento), DESCRICOES[AOpcao], FCorrNome]);
+    if Assigned(FLog) then
+      FLog(Format('✏️ Tipo da batida corrigido pelo colaborador: %s - %s às %s',
+        [FCorrNome, DESCRICOES[AOpcao], FormatDateTime('hh:nn:ss', FCorrMomento)]));
+    if Assigned(FOnBatidaRegistrada) then
+      FOnBatidaRegistrada();
+  end
+  else
+    MostrarResultado(COR_ERRO, '⚠️ Não foi possível corrigir', FCorrNome, dmDados.LastError);
+  FCorrAtiva := False;
+  pnlCorrecao.Visible := False;
+  tmrVoltar.Enabled := False;
+  tmrVoltar.Interval := 4000;
+  tmrVoltar.Enabled := True;
+end;
+
+procedure TfrmTerminalPonto.skTipoClick(Sender: TObject);
+begin
+  CorrigirTipo(TComponent(Sender).Tag);
+end;
+
 procedure TfrmTerminalPonto.FormKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
 begin
-  if Key = VK_ESCAPE then
-    Close;
+  case Key of
+    VK_ESCAPE: Close;
+    VK_F1..VK_F4:
+      if FCorrAtiva then
+      begin
+        CorrigirTipo(Key - VK_F1 + 1);
+        Key := 0;
+      end;
+  end;
 end;
 
 procedure TfrmTerminalPonto.FormClose(Sender: TObject; var Action: TCloseAction);
