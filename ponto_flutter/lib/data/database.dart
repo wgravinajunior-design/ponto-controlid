@@ -24,7 +24,21 @@ class BatidaBiometrica {
   final String tipoBatida;
   final DateTime? ultimaBatida;
   final int marcacaoId;
-  BatidaBiometrica(this.resultado, this.tipoBatida, this.ultimaBatida, [this.marcacaoId = 0]);
+  /// ENTRADA, SAÍDA ALMOÇO, VOLTA ALMOÇO, SAÍDA (ou ENTRADA/SAÍDA EXTRA)
+  final String descricao;
+  BatidaBiometrica(this.resultado, this.tipoBatida, this.ultimaBatida, [this.marcacaoId = 0, this.descricao = '']);
+}
+
+/// No terminal, leituras do mesmo colaborador com menos de [janelaRepeticaoMin] minutos de diferença
+/// são recusadas como repetição (encostou o dedo de novo) e não invertem Entrada/Saída.
+const janelaRepeticaoMin = 10;
+
+/// Descrição da batida pela posição no dia (já sem as leituras repetidas).
+String descricaoBatida(int posicao, String tipo) {
+  const nomes = ['ENTRADA', 'SAÍDA ALMOÇO', 'VOLTA ALMOÇO', 'SAÍDA'];
+  final esperado = posicao.isEven ? 'E' : 'S';
+  if (posicao < 4 && tipo == esperado) return nomes[posicao];
+  return tipo == 'S' ? 'SAÍDA EXTRA' : 'ENTRADA EXTRA';
 }
 
 class VersaoBdItem {
@@ -368,11 +382,12 @@ class Db {
           [pessoaId, inicioDoDia(dataHora), fimDoDia(dataHora)]);
       final qtd = asInt(r?['QTD']);
       final ultima = asDate(r?['ULTIMA']);
-      var tipo = qtd.isOdd ? 'S' : 'E';
+      var tipo = qtd.isOdd ? 'S' : 'E'; // provisório: recalcularTiposDia define o tipo final
 
-      // Leitura repetida em sequência (colaborador encostou o dedo duas vezes)
-      if (ultima != null && intervaloMinimoMin > 0 && minutesBetween(dataHora, ultima) < intervaloMinimoMin) {
-        tipo = qtd.isOdd ? 'E' : 'S';
+      // Leitura repetida em sequência (colaborador encostou o dedo duas vezes). Antes a janela era de
+      // só 2 min e uma segunda leitura na saída do almoço invertia todas as batidas seguintes do dia.
+      final janela = intervaloMinimoMin > janelaRepeticaoMin ? intervaloMinimoMin : janelaRepeticaoMin;
+      if (ultima != null && minutesBetween(dataHora, ultima) < janela) {
         return BatidaBiometrica(ResultadoBatida.repetida, tipo, ultima);
       }
 
@@ -391,7 +406,11 @@ class Db {
       final id = asInt(ins?['PMA_ID']);
       // NSR sequencial do registro eletrônico (Portaria 671): usa o próprio ID da marcação
       if (id > 0) await exec('UPDATE TB_PONTO_MARCACAO SET PMA_NSR = ? WHERE PMA_ID = ?', [id, id]);
-      return BatidaBiometrica(ResultadoBatida.registrada, tipo, ultima, id);
+      // Tipo definitivo pela sequência do dia (ignora repetições e trata turno da noite)
+      final pos = await recalcularTiposDia(pessoaId, dataHora, marcacaoId: id);
+      final t = await queryOne('SELECT PMA_TIPO_BATIDA FROM TB_PONTO_MARCACAO WHERE PMA_ID = ?', [id]);
+      if (asStr(t?['PMA_TIPO_BATIDA']).isNotEmpty) tipo = asStr(t?['PMA_TIPO_BATIDA']);
+      return BatidaBiometrica(ResultadoBatida.registrada, tipo, ultima, id, descricaoBatida(pos ?? qtd, tipo));
     } catch (e) {
       lastError = 'Erro ao registrar batida: $e';
       return BatidaBiometrica(ResultadoBatida.erro, '', null);
@@ -792,9 +811,13 @@ class Db {
 
   // ======================= Marcações =======================
 
+  /// true se a última chamada de [gravarMarcacao] inseriu um registro novo (false = já existia)
+  bool ultimaGravacaoNova = false;
+
   Future<bool> gravarMarcacao(int pessoaId, int relogioId, DateTime dataHora, int evento, int controlIdLogId,
       String origem, int nsr, String pis, String cpf, String tipoBatida, String tipoIdent,
       {bool recalcularTipo = true}) async {
+    ultimaGravacaoNova = false;
     try {
       final r = relogioId > 0
           ? await queryOne('SELECT PMA_ID FROM TB_PONTO_MARCACAO WHERE PMA_RELOGIO = ? AND PMA_CONTROLID_LOG_ID = ?',
@@ -810,6 +833,7 @@ class Db {
             pessoaId > 0 ? pessoaId : null, relogioId > 0 ? relogioId : null, dataHora, evento, controlIdLogId,
             origem.isEmpty ? 'C' : origem.substring(0, 1), nsr, pis, cpf, tipoBatida, tipoIdent
           ]);
+      ultimaGravacaoNova = true;
       if (recalcularTipo && pessoaId > 0) await recalcularTiposDia(pessoaId, dataHora);
       return true;
     } catch (e) {
@@ -833,28 +857,33 @@ class Db {
   /// Marca cada batida do dia como Entrada (E) ou Saída (S) pela ordem: 1ª entrada, 2ª saída, 3ª entrada...
   /// Batidas lançadas manualmente mantêm o tipo informado. Se o dia anterior terminou com entrada aberta
   /// (turno que vira a noite), a primeira batida do dia seguinte, até 14h depois, é a saída.
-  Future<void> recalcularTiposDia(int pessoaId, DateTime dia) async {
+  /// Retorna a posição da [marcacaoId] na sequência do dia (sem repetições), se informada.
+  Future<int?> recalcularTiposDia(int pessoaId, DateTime dia, {int marcacaoId = 0}) async {
     final d = soData(dia);
     Future<List<DbRow>> doDia(DateTime x) => query(
         'SELECT PMA_ID, PMA_DATA_HORA, PMA_ORIGEM, PMA_TIPO_BATIDA FROM TB_PONTO_MARCACAO '
         'WHERE PMA_PESSOA = ? AND PMA_DATA_HORA BETWEEN ? AND ? AND $validas ORDER BY PMA_DATA_HORA, PMA_ID',
         [pessoaId, inicioDoDia(x), fimDoDia(x)]);
     final hoje = await doDia(d);
-    if (hoje.isEmpty) return;
+    if (hoje.isEmpty) return null;
     var inicio = 0; // 0 = a primeira batida do dia é entrada
     final ontem = await doDia(d.subtract(const Duration(days: 1)));
     if (ontem.isNotEmpty && ontem.length.isOdd) {
       final ult = asDate(ontem.last['PMA_DATA_HORA']), prim = asDate(hoje.first['PMA_DATA_HORA']);
       if (ult != null && prim != null && prim.difference(ult).inHours < 14) inicio = 1;
     }
+    int? posicaoMarcacao;
     for (var i = 0; i < hoje.length; i++) {
       final r = hoje[i];
+      final pos = i;
+      if (asInt(r['PMA_ID']) == marcacaoId) posicaoMarcacao = pos;
       if (asStr(r['PMA_ORIGEM']).toUpperCase() == 'M') continue;
-      final tipo = (i + inicio).isEven ? 'E' : 'S';
+      final tipo = (pos + inicio).isEven ? 'E' : 'S';
       if (asStr(r['PMA_TIPO_BATIDA']) != tipo) {
         await exec('UPDATE TB_PONTO_MARCACAO SET PMA_TIPO_BATIDA = ? WHERE PMA_ID = ?', [tipo, r['PMA_ID']]);
       }
     }
+    return posicaoMarcacao == null ? null : posicaoMarcacao + inicio;
   }
 
   /// Condição SQL das batidas válidas (as desconsideradas ficam guardadas, mas não contam).

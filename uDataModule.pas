@@ -37,6 +37,7 @@ type
   private
     FLastError: string;
     FLastMigracaoLog: string;
+    FUltimaGravacaoNova: Boolean;
     procedure ConfigureConnection;
   public
     function Conectar: Boolean;
@@ -81,6 +82,10 @@ type
     function GetSlotsPrevistos(APessoaId: Integer; AData: TDateTime): TArray<Integer>;
     // Corrige o tipo (E/S) de uma batida biométrica recém-registrada no terminal
     function CorrigirTipoBatida(APessoaId: Integer; ADataHora: TDateTime; const ATipo: string): Boolean;
+    // Recalcula Entrada/Saída das batidas do dia vindas do relógio (origem C)
+    procedure RecalcularTiposDia(APessoaId: Integer; AData: TDateTime);
+    // Classifica E/S todas as batidas ainda sem tipo válido (ex.: 'Batida Ponto')
+    function NormalizarTiposBatida: Integer;
 
     // Horários / Jornadas de Trabalho
     function GetHorarios(const AApenasAtivos: Boolean = True): TFDQuery;
@@ -131,6 +136,8 @@ type
 
     property LastError: string read FLastError;
     property LastMigracaoLog: string read FLastMigracaoLog;
+    // True se a última chamada de GravarMarcacao inseriu um registro novo
+    property UltimaGravacaoNova: Boolean read FUltimaGravacaoNova;
   end;
 
 var
@@ -825,6 +832,115 @@ begin
   end;
 end;
 
+const
+  JANELA_REPETICAO_MIN = 10;
+
+// Posição da batida na jornada (0=Entrada, 1=Saída almoço, 2=Volta almoço,
+// 3=Saída). Segue a sequência do dia, mas se a batida estiver mais perto do
+// horário seguinte (ex.: esqueceu a saída do almoço), pula para ele.
+function ProximoSlotJornada(const ASlots: TArray<Integer>; AAnterior: Integer;
+  AMomento: TDateTime): Integer;
+var
+  M: Integer;
+begin
+  Result := AAnterior + 1;
+  if (Length(ASlots) < 4) or (Result < 1) or (Result + 1 > 3) then
+    Exit;
+  M := Round(Frac(AMomento) * 1440);
+  if Abs(M - ASlots[Result + 1]) < Abs(M - ASlots[Result]) then
+    Result := Result + 1;
+end;
+
+procedure TdmDados.RecalcularTiposDia(APessoaId: Integer; AData: TDateTime);
+var
+  Qry, Upd: TFDQuery;
+  Slots: TArray<Integer>;
+  Idx: Integer;
+  Anterior, DH: TDateTime;
+  Tipo, Atual, Origem: string;
+begin
+  if APessoaId <= 0 then
+    Exit;
+  if not IsConectado then
+    Conectar;
+  Slots := GetSlotsPrevistos(APessoaId, AData);
+  Qry := TFDQuery.Create(nil);
+  Upd := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Upd.Connection := FDConnection;
+    Upd.SQL.Text := 'UPDATE TB_PONTO_MARCACAO SET PMA_TIPO_BATIDA = :TIPO WHERE PMA_ID = :ID';
+    Qry.SQL.Text :=
+      'SELECT PMA_ID, PMA_DATA_HORA, PMA_TIPO_BATIDA, PMA_ORIGEM FROM TB_PONTO_MARCACAO ' +
+      'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' +
+      'ORDER BY PMA_DATA_HORA, PMA_ID';
+    Qry.ParamByName('PESSOA').AsInteger := APessoaId;
+    Qry.ParamByName('INI').AsDateTime := StartOfTheDay(AData);
+    Qry.ParamByName('FIM').AsDateTime := EndOfTheDay(AData);
+    Qry.Open;
+    Idx := -1;
+    Anterior := 0;
+    while not Qry.Eof do
+    begin
+      DH := Qry.FieldByName('PMA_DATA_HORA').AsDateTime;
+      // leitura repetida mantém a posição da anterior
+      if (Anterior = 0) or (MinutesBetween(DH, Anterior) >= JANELA_REPETICAO_MIN) then
+        Idx := ProximoSlotJornada(Slots, Idx, DH);
+      Anterior := DH;
+      if Odd(Idx) then Tipo := 'S' else Tipo := 'E';
+
+      Atual := UpperCase(Trim(Qry.FieldByName('PMA_TIPO_BATIDA').AsString));
+      Origem := UpperCase(Trim(Qry.FieldByName('PMA_ORIGEM').AsString));
+      // Batidas do relógio são reclassificadas; manuais/terminal só se o tipo for inválido
+      if (Atual <> Tipo) and ((Origem = 'C') or ((Atual <> 'E') and (Atual <> 'S'))) then
+      begin
+        Upd.ParamByName('TIPO').AsString := Tipo;
+        Upd.ParamByName('ID').AsInteger := Qry.FieldByName('PMA_ID').AsInteger;
+        Upd.ExecSQL;
+      end;
+      Qry.Next;
+    end;
+  finally
+    Upd.Free;
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.NormalizarTiposBatida: Integer;
+var
+  Qry: TFDQuery;
+  Pessoas: TArray<Integer>;
+  Dias: TArray<TDateTime>;
+  I: Integer;
+begin
+  Result := 0;
+  if not IsConectado then
+    Conectar;
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'SELECT DISTINCT PMA_PESSOA, CAST(PMA_DATA_HORA AS DATE) AS DIA FROM TB_PONTO_MARCACAO ' +
+      'WHERE PMA_PESSOA > 0 AND (PMA_TIPO_BATIDA IS NULL OR PMA_TIPO_BATIDA NOT IN (''E'', ''S''))';
+    Qry.Open;
+    while not Qry.Eof do
+    begin
+      SetLength(Pessoas, Length(Pessoas) + 1);
+      SetLength(Dias, Length(Dias) + 1);
+      Pessoas[High(Pessoas)] := Qry.FieldByName('PMA_PESSOA').AsInteger;
+      Dias[High(Dias)] := Qry.FieldByName('DIA').AsDateTime;
+      Qry.Next;
+    end;
+  finally
+    Qry.Free;
+  end;
+  for I := 0 to High(Pessoas) do
+  begin
+    RecalcularTiposDia(Pessoas[I], Dias[I]);
+    Inc(Result);
+  end;
+end;
+
 function TdmDados.CorrigirTipoBatida(APessoaId: Integer; ADataHora: TDateTime;
   const ATipo: string): Boolean;
 var
@@ -936,11 +1052,8 @@ end;
 function TdmDados.RegistrarBatidaBiometrica(APessoaId: Integer; ADataHora: TDateTime;
   AIntervaloMinimoMin: Integer; out ATipoBatida, ADescricaoBatida: string;
   out AUltimaBatida: TDateTime): TResultadoBatida;
-const
-  // Duas leituras do mesmo colaborador em menos de 10 minutos são tratadas como
-  // repetição (o colaborador encostou o dedo de novo para "confirmar"). Antes uma
-  // leitura dupla na saída do almoço invertia todas as batidas seguintes do dia.
-  JANELA_REPETICAO_MIN = 10;
+// Duas leituras do mesmo colaborador em menos de JANELA_REPETICAO_MIN são
+// tratadas como repetição (o colaborador encostou o dedo de novo para "confirmar").
 var
   Qry: TFDQuery;
   Cpf, Pis: string;
@@ -953,17 +1066,8 @@ var
   // mais perto do horário seguinte (ex.: esqueceu de bater a saída do almoço),
   // pula para ele — mantendo Entrada/Saída coerentes com a jornada.
   function ProximoSlot(AAnterior: Integer; AMomento: TDateTime): Integer;
-  var
-    M, Seq, Pula: Integer;
   begin
-    Result := AAnterior + 1;
-    if (Length(Slots) < 4) or (Result < 1) or (Result + 1 > 3) then
-      Exit;
-    M := Round(Frac(AMomento) * 1440);
-    Seq := Abs(M - Slots[Result]);
-    Pula := Abs(M - Slots[Result + 1]);
-    if Pula < Seq then
-      Result := Result + 1;
+    Result := ProximoSlotJornada(Slots, AAnterior, AMomento);
   end;
 
   function Descricao(ASlot: Integer): string;
@@ -1200,10 +1304,12 @@ var
   Qry: TFDQuery;
 begin
   Result := False;
+  FUltimaGravacaoNova := False;
   if not IsConectado then
     Conectar;
 
   Qry := TFDQuery.Create(nil);
+  try
   try
     Qry.Connection := FDConnection;
 
@@ -1243,6 +1349,7 @@ begin
     Qry.ParamByName('TIPOIDENT').AsString := ATipoIdent;
     Qry.ExecSQL;
 
+    FUltimaGravacaoNova := True;
     Result := True;
   except
     on E: Exception do
@@ -1251,7 +1358,10 @@ begin
       Result := False;
     end;
   end;
-  Qry.Free;
+  finally
+    // antes o Exit de "já gravado" pulava o Free (vazamento a cada coleta)
+    Qry.Free;
+  end;
 end;
 
 function TdmDados.GetMarcacoes(ADataIni, ADataFim: TDateTime; ARelogioId, APessoaId: Integer): TFDQuery;

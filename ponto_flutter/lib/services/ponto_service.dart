@@ -385,11 +385,16 @@ class PontoService {
           return null;
         }
         for (final l in logs) {
+          // Só o evento 7 (acesso concedido) é batida; negados / não identificados não entram no espelho
+          if (l.event != 7) {
+            if (l.id > maxLog) maxLog = l.id;
+            continue;
+          }
           var pessoaId = l.userId;
           if (pessoaId > 0 && await _db.getPessoaPorId(pessoaId) == null) pessoaId = 0;
           if (await _db.gravarMarcacao(pessoaId, relogioId, l.time ?? DateTime.now(), l.event, l.id, 'C', l.id, '',
               '', 'Batida Ponto', 'Control iD API')) {
-            novas++;
+            if (_db.ultimaGravacaoNova) novas++;
             if (l.id > maxLog) maxLog = l.id;
           }
         }
@@ -411,7 +416,7 @@ class PontoService {
         final pessoaId = await _db.buscarPessoaPorPisOuCpf(a.pis, a.cpf);
         if (await _db.gravarMarcacao(
             pessoaId, relogioId, a.dataHora, 7, a.nsr, 'C', a.nsr, a.pis, a.cpf, 'Batida Ponto', 'REP AFD')) {
-          novas++;
+          if (_db.ultimaGravacaoNova) novas++;
           if (a.nsr > maxLog) maxLog = a.nsr;
         }
       }

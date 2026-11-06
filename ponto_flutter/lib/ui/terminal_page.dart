@@ -88,7 +88,7 @@ class _TerminalPageState extends State<TerminalPage> {
           final agora = DateTime.now();
           final r = await Db.instance
               .registrarBatidaBiometrica(d.pessoaId, agora, AppConfig.instance.relogio.intervaloMinimoBatidaMin);
-          final tipo = r.tipoBatida == 'S' ? 'SAÍDA' : 'ENTRADA';
+          final tipo = r.descricao.isNotEmpty ? r.descricao : (r.tipoBatida == 'S' ? 'SAÍDA' : 'ENTRADA');
           switch (r.resultado) {
             case ResultadoBatida.registrada:
               _mostrar(d.nome, '$tipo registrada às ${fmtHoraSeg(agora)}', Colors.green.shade700, Icons.check_circle);
@@ -100,7 +100,8 @@ class _TerminalPageState extends State<TerminalPage> {
               if (comp != null && AppConfig.instance.relogio.imprimirComprovante) await ComprovanteService.imprimir(comp);
               _app.dadosAlterados();
             case ResultadoBatida.repetida:
-              _mostrar(d.nome, 'Batida já registrada às ${fmtHora(r.ultimaBatida)}', Colors.orange.shade700, Icons.info);
+              _mostrar(d.nome, 'Batida já registrada às ${fmtHora(r.ultimaBatida)} (leituras em menos de $janelaRepeticaoMin min são ignoradas)',
+                  Colors.orange.shade700, Icons.info);
             case ResultadoBatida.erro:
               _mostrar(d.nome, Db.instance.lastError, Colors.red, Icons.error);
               _app.logTs('❌ ${Db.instance.lastError}', true);

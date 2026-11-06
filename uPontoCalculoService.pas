@@ -647,8 +647,13 @@ begin
             JusTipo := QryJus.FieldByName('JUS_TIPO').AsString;
             JusMotivo := QryJus.FieldByName('JUS_MOTIVO').AsString;
             AbonoMin := QryJus.FieldByName('JUS_ABONO_MINUTOS').AsInteger;
-            if AbonoMin <= 0 then
-              AbonoMin := DiaItem.CargaPrevistaMin;
+            // O abono cobre só o que faltou para a carga do dia. Antes, um
+            // atestado de meio período abonava o dia inteiro e as horas
+            // trabalhadas viravam hora extra.
+            if (AbonoMin <= 0) or (AbonoMin > DiaItem.CargaPrevistaMin - DiaItem.TrabalhadoMin) then
+              AbonoMin := DiaItem.CargaPrevistaMin - DiaItem.TrabalhadoMin;
+            if AbonoMin < 0 then
+              AbonoMin := 0;
 
             DiaItem.Ocorrencia := JusTipo;
             if JusMotivo <> '' then

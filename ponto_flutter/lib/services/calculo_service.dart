@@ -471,7 +471,10 @@ class PontoCalculoService {
       final jus = jusPorDia[dia];
       if (jus != null) {
         abono = asInt(jus['JUS_ABONO_MINUTOS']);
-        if (abono <= 0) abono = it.cargaPrevistaMin;
+        // O abono cobre só o que faltou: um atestado de meio período não pode virar hora extra
+        final faltou = it.cargaPrevistaMin - it.trabalhadoMin;
+        if (abono <= 0 || abono > faltou) abono = faltou;
+        if (abono < 0) abono = 0;
         final motivo = asStr(jus['JUS_MOTIVO']);
         it.justificativa = asStr(jus['JUS_TIPO']) + (motivo.isNotEmpty ? ' ($motivo)' : '');
       }
