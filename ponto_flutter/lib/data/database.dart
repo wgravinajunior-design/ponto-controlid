@@ -462,6 +462,7 @@ class Db {
       await exec("UPDATE TB_PONTO_HORARIO SET HOR_ATIVO = 'N' WHERE HOR_ID = ?", [id]);
       return 'O horário possui colaboradores vinculados e foi inativado para preservar o histórico.';
     }
+    await exec('DELETE FROM TB_PONTO_HORARIO_DIA WHERE HDI_HORARIO = ?', [id]);
     await exec('DELETE FROM TB_PONTO_HORARIO WHERE HOR_ID = ?', [id]);
     return null;
   }

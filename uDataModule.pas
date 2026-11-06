@@ -110,7 +110,7 @@ type
       AEvento: Integer; AControlIdLogId: Int64; const AOrigem: string;
       ANsr: Int64; const APis, ACpf, ATipoBatida, ATipoIdent: string): Boolean;
     function GetMarcacoes(ADataIni, ADataFim: TDateTime; ARelogioId: Integer = 0;
-      APessoaId: Integer = 0): TFDQuery;
+      APessoaId: Integer = 0; AApenasValidas: Boolean = False): TFDQuery;
     function ExcluirMarcacao(AMarcacaoId: Integer): Boolean;
     function AtualizarMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida: string;
       const AMotivo: string = ''): Boolean;
@@ -1364,7 +1364,8 @@ begin
   end;
 end;
 
-function TdmDados.GetMarcacoes(ADataIni, ADataFim: TDateTime; ARelogioId, APessoaId: Integer): TFDQuery;
+function TdmDados.GetMarcacoes(ADataIni, ADataFim: TDateTime; ARelogioId, APessoaId: Integer;
+  AApenasValidas: Boolean): TFDQuery;
 var
   Qry: TFDQuery;
   SQL: string;
@@ -1390,6 +1391,10 @@ begin
 
   if APessoaId > 0 then
     SQL := SQL + 'AND M.PMA_PESSOA = :PESSOA ';
+
+  // Batida corrigida ou desconsiderada fica gravada (Portaria 671), mas não entra no cálculo
+  if AApenasValidas and CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    SQL := SQL + 'AND COALESCE(M.PMA_DESCONSIDERADA, ''N'') = ''N'' ';
 
   SQL := SQL + 'ORDER BY M.PMA_DATA_HORA DESC, M.PMA_ID DESC';
 

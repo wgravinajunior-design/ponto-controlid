@@ -3,8 +3,8 @@
 interface
 
 uses
-  System.SysUtils, System.Classes, System.DateUtils, System.Math, System.Generics.Defaults, System.Generics.Collections,
-  FireDAC.Comp.Client, Data.DB, uDataModule;
+  System.SysUtils, System.StrUtils, System.Classes, System.DateUtils, System.Math, System.Generics.Defaults, System.Generics.Collections,
+  FireDAC.Comp.Client, FireDAC.Stan.Param, Data.DB, uDataModule;
 
 type
   TTipoDia = (tdUtil, tdSabadoCompensado, tdSabadoTrabalhado, tdDomingoDSR, tdFeriado, tdFolga);
@@ -47,7 +47,8 @@ type
     TotalTrabalhadoMin: Integer;
     TotalExtrasMin: Integer;
     TotalFaltasMin: Integer;
-    SaldoTotalMin: Integer;
+    SaldoTotalMin: Integer;    // saldo final: extras - faltas + créditos de horas lançados
+    CreditoHorasMin: Integer;  // créditos/débitos manuais (TB_PONTO_BANCO_HORAS) considerados no saldo
     function TotalPrevistoStr: string;
     function TotalTrabalhadoStr: string;
     function TotalExtrasStr: string;
@@ -301,6 +302,11 @@ begin
     SB.AppendLine(Format('    <div class="card"><div>Horas Extras</div><div class="val val-pos">+%s</div></div>', [FResumo.TotalExtrasStr]));
     SB.AppendLine(Format('    <div class="card"><div>Faltas / Atrasos</div><div class="val val-neg">-%s</div></div>', [FResumo.TotalFaltasStr]));
 
+    if FResumo.CreditoHorasMin <> 0 then
+      SB.AppendLine(Format('    <div class="card"><div>Crédito de horas lançado</div><div class="val %s">%s</div></div>',
+        [IfThen(FResumo.CreditoHorasMin >= 0, 'val-pos', 'val-neg'),
+         TPontoCalculoService.MinutosParaHora(FResumo.CreditoHorasMin, True)]));
+
     if FResumo.SaldoTotalMin >= 0 then
       SB.AppendLine(Format('    <div class="card"><div>Saldo do Período</div><div class="val val-pos">%s</div></div>', [FResumo.SaldoTotalStr]))
     else
@@ -346,6 +352,12 @@ var
   Filtradas: TArray<TDateTime>;
   Feriados: TStringList;
   FeriadoDesc: string;
+  BancoHoras: Boolean;
+  CreditoMin: Integer;
+  // Jornada por dia da semana (TB_PONTO_HORARIO_DIA), índice 1 = segunda ... 7 = domingo
+  DiaCfgExiste, DiaCfgFolga: array[1..7] of Boolean;
+  DiaCfgCarga: array[1..7] of Integer;
+  DiaIso: Integer;
 
   function MinCampo(AQry: TFDQuery; const ACampo: string): Integer;
   var
@@ -355,6 +367,15 @@ var
     F := AQry.FindField(ACampo);
     if (F <> nil) and (not F.IsNull) then
       Result := Round(Frac(F.AsDateTime) * 1440);
+  end;
+
+  // 'HH:MM' gravado em texto -> minutos (-1 quando vazio)
+  function HoraOuNada(const S: string): Integer;
+  begin
+    if Pos(':', Trim(S)) > 0 then
+      Result := TPontoCalculoService.HoraParaMinutos(S)
+    else
+      Result := -1;
   end;
 
   // Carga em minutos a partir dos horários (Entrada/Saída almoço/Volta/Saída)
@@ -402,6 +423,7 @@ begin
   TrabalhaSabado := False;
   SabCargaMin := 240;
   HorarioDesc := 'Comercial 44h (Padrao)';
+  BancoHoras := False;
   CargaSextaMin := -1;
 
   QryHorario := dmDados.GetHorarioPorId(HorId);
@@ -415,6 +437,8 @@ begin
       if CargaDiariaMin <= 0 then CargaDiariaMin := 528;
       CompensaSabado := (QryHorario.FieldByName('HOR_COMPENSA_SABADO').AsString = 'S');
       TrabalhaSabado := (QryHorario.FieldByName('HOR_TRABALHA_SABADO').AsString = 'S');
+      if QryHorario.FindField('HOR_BANCO_HORAS') <> nil then
+        BancoHoras := (QryHorario.FieldByName('HOR_BANCO_HORAS').AsString = 'S');
 
       // Carga diária derivada dos horários cadastrados (seg-qui) e da saída
       // diferenciada da sexta-feira. Ex.: 08-12/13-18 = 9h; sexta até 17h = 8h.
@@ -442,8 +466,79 @@ begin
   end;
   Espelho.FResumo.JornadaDescricao := HorarioDesc;
 
+  // 2b. Jornada por dia da semana gravada no cadastro (mesma regra do GoUp Ponto):
+  //     dia configurado usa a própria carga ou folga; sem grade, valem os horários gerais.
+  for DiaIso := 1 to 7 do
+  begin
+    DiaCfgExiste[DiaIso] := False;
+    DiaCfgFolga[DiaIso] := False;
+    DiaCfgCarga[DiaIso] := 0;
+  end;
+  try
+    var QryDia := TFDQuery.Create(nil);
+    try
+      QryDia.Connection := dmDados.FDConnection;
+      QryDia.SQL.Text := 'SELECT HDI_DIA_SEMANA, HDI_ENTRADA_1, HDI_SAIDA_1, HDI_ENTRADA_2, HDI_SAIDA_2, ' +
+        'HDI_CARGA_MIN, HDI_FOLGA FROM TB_PONTO_HORARIO_DIA WHERE HDI_HORARIO = :H';
+      QryDia.ParamByName('H').AsInteger := HorId;
+      QryDia.Open;
+      while not QryDia.Eof do
+      begin
+        DiaIso := QryDia.FieldByName('HDI_DIA_SEMANA').AsInteger;
+        if (DiaIso >= 1) and (DiaIso <= 7) then
+        begin
+          DiaCfgExiste[DiaIso] := True;
+          DiaCfgFolga[DiaIso] := (QryDia.FieldByName('HDI_FOLGA').AsString = 'S');
+          DiaCfgCarga[DiaIso] := QryDia.FieldByName('HDI_CARGA_MIN').AsInteger;
+          if (not DiaCfgFolga[DiaIso]) and (DiaCfgCarga[DiaIso] <= 0) then
+            DiaCfgCarga[DiaIso] := CargaPorHorarios(
+              HoraOuNada(QryDia.FieldByName('HDI_ENTRADA_1').AsString),
+              HoraOuNada(QryDia.FieldByName('HDI_SAIDA_1').AsString),
+              HoraOuNada(QryDia.FieldByName('HDI_ENTRADA_2').AsString),
+              HoraOuNada(QryDia.FieldByName('HDI_SAIDA_2').AsString));
+        end;
+        QryDia.Next;
+      end;
+    finally
+      QryDia.Free;
+    end;
+  except
+    // Base sem a tabela de jornada por dia: segue com os horários gerais
+  end;
+
+  // 2c. Créditos de horas lançados (saldo de sistema anterior, ajustes, pagamentos, folgas):
+  //     os do período entram no saldo; com banco de horas, os anteriores formam o saldo acumulado.
+  //     Créditos/débitos apurados no fechamento (C/D) não entram: são o próprio cálculo.
+  CreditoMin := 0;
+  try
+    var QryBh := TFDQuery.Create(nil);
+    try
+      QryBh.Connection := dmDados.FDConnection;
+      QryBh.SQL.Text := 'SELECT BH_DATA, BH_MINUTOS, BH_TIPO FROM TB_PONTO_BANCO_HORAS ' +
+        'WHERE BH_PESSOA = :P AND BH_DATA <= :F';
+      QryBh.ParamByName('P').AsInteger := APessoaId;
+      QryBh.ParamByName('F').AsDate := Trunc(ADataFim);
+      QryBh.Open;
+      while not QryBh.Eof do
+      begin
+        if Trunc(QryBh.FieldByName('BH_DATA').AsDateTime) < Trunc(ADataIni) then
+        begin
+          if BancoHoras then
+            Inc(CreditoMin, QryBh.FieldByName('BH_MINUTOS').AsInteger);
+        end
+        else if (QryBh.FieldByName('BH_TIPO').AsString <> 'C') and (QryBh.FieldByName('BH_TIPO').AsString <> 'D') then
+          Inc(CreditoMin, QryBh.FieldByName('BH_MINUTOS').AsInteger);
+        QryBh.Next;
+      end;
+    finally
+      QryBh.Free;
+    end;
+  except
+    // Base sem a tabela de banco de horas: sem créditos
+  end;
+
   // 3. Obter Marcacoes no Periodo
-  QryMarcacoes := dmDados.GetMarcacoes(ADataIni, ADataFim, 0, APessoaId);
+  QryMarcacoes := dmDados.GetMarcacoes(ADataIni, ADataFim, 0, APessoaId, True);
 
   // 4. Obter Justificativas no Periodo
   QryJus := dmDados.GetJustificativasPeriodo(APessoaId, ADataIni, ADataFim);
@@ -532,6 +627,44 @@ begin
           if (DayOfWeek(DataCur) = 6) and (CargaSextaMin > 0) then
             DiaItem.CargaPrevistaMin := CargaSextaMin;
           Inc(TotalUteis);
+        end;
+      end;
+
+      // Jornada específica do dia da semana (DayOfTheWeek: 1 = segunda ... 7 = domingo)
+      DiaIso := DayOfTheWeek(DataCur);
+      if DiaCfgExiste[DiaIso] then
+      begin
+        if DiaItem.CargaPrevistaMin > 0 then
+          Dec(TotalUteis);
+        if DiaCfgFolga[DiaIso] then
+        begin
+          DiaItem.CargaPrevistaMin := 0;
+          if DiaIso = 7 then
+          begin
+            DiaItem.TipoDia := tdDomingoDSR;
+            DiaItem.Ocorrencia := 'DSR / Folga';
+          end
+          else if (DiaIso = 6) and CompensaSabado then
+          begin
+            DiaItem.TipoDia := tdSabadoCompensado;
+            DiaItem.Ocorrencia := 'Sabado Compensado';
+          end
+          else
+          begin
+            DiaItem.TipoDia := tdFolga;
+            DiaItem.Ocorrencia := 'Folga semanal';
+          end;
+        end
+        else
+        begin
+          DiaItem.CargaPrevistaMin := DiaCfgCarga[DiaIso];
+          DiaItem.Ocorrencia := '';
+          if DiaIso = 6 then
+            DiaItem.TipoDia := tdSabadoTrabalhado
+          else
+            DiaItem.TipoDia := tdUtil;
+          if DiaItem.CargaPrevistaMin > 0 then
+            Inc(TotalUteis);
         end;
       end;
 
@@ -733,7 +866,8 @@ begin
   Espelho.FResumo.TotalTrabalhadoMin := TotTrab;
   Espelho.FResumo.TotalExtrasMin := TotExt;
   Espelho.FResumo.TotalFaltasMin := TotFalt;
-  Espelho.FResumo.SaldoTotalMin := TotExt - TotFalt;
+  Espelho.FResumo.CreditoHorasMin := CreditoMin;
+  Espelho.FResumo.SaldoTotalMin := TotExt - TotFalt + CreditoMin;
 end;
 
 end.
