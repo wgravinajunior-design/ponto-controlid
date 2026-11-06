@@ -1,5 +1,5 @@
 // Versão e build do aplicativo (equivalente ao uBuildInfo.pas).
-const String buildVersion = '2.0.1';
+const String buildVersion = '2.0.2';
 const int buildNumber = 1;
 const String buildDate = '2026-11-06';
 
