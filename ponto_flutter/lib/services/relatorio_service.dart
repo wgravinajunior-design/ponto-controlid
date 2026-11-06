@@ -1,5 +1,6 @@
 import '../core/util.dart';
 import '../data/database.dart';
+import 'calculo_service.dart';
 
 class _Batida {
   final DateTime dataHora;
@@ -116,6 +117,83 @@ class RelatorioPonto {
             '<div class="sign-line">Assinatura do Empregador</div></div></div>');
     }
     sb.writeln('</body></html>');
+    return sb.toString();
+  }
+
+  /// Conferência diária: uma linha por colaborador com as batidas do dia, previsto x realizado e ocorrências.
+  /// [pessoaId] = 0 traz todos os colaboradores ativos.
+  static Future<String> gerarConferenciaDiaHtml(
+      DateTime data, int pessoaId, String razaoEmpresa, String cnpjEmpresa) async {
+    final dia = soData(data);
+    final db = Db.instance;
+    final colabs = <DbRow>[];
+    if (pessoaId > 0) {
+      final p = await db.getPessoaPorId(pessoaId);
+      if (p != null) colabs.add(p);
+    } else {
+      colabs.addAll(await db.getColaboradores());
+    }
+    var presentes = 0, semRegistro = 0, impares = 0, folgas = 0;
+    final linhas = StringBuffer();
+    for (final c in colabs) {
+      final e = await PontoCalculoService.calcularEspelho(asInt(c['PES_ID']), dia, dia);
+      final d = e.dias.isEmpty ? null : e.dias.first;
+      final nome = esc(asStr(c['PES_RSOCIAL_NOME']));
+      if (d == null) {
+        linhas.writeln('<tr class="fds"><td class="l">$nome</td><td colspan="7">Dia futuro: ainda não apurado</td></tr>');
+        continue;
+      }
+      final previsto = d.cargaPrevistaMin > 0;
+      final temBatida = d.batidas.isNotEmpty;
+      String situacao, cls = '';
+      if (d.foraContrato || d.afastamento.isNotEmpty || (!previsto && !temBatida)) {
+        situacao = d.ocorrencia.isEmpty ? 'Folga' : d.ocorrencia;
+        cls = 'fds';
+        folgas++;
+      } else if (!temBatida) {
+        situacao = d.justificativa.isNotEmpty ? d.ocorrencia : 'Sem registro';
+        cls = d.justificativa.isNotEmpty ? '' : 'falta';
+        if (d.justificativa.isEmpty) semRegistro++;
+      } else {
+        presentes++;
+        if (d.impar) {
+          impares++;
+          cls = 'impar';
+        }
+        situacao = d.ocorrencia.isEmpty ? 'OK' : d.ocorrencia;
+      }
+      final bat = d.batidas.map(fmtHora).join(' &nbsp; ');
+      linhas.writeln('<tr class="$cls"><td class="l">$nome</td><td>${esc(e.resumo.jornadaDescricao)}</td>'
+          '<td class="l">${bat.isEmpty ? '—' : bat}</td>'
+          '<td>${previsto ? d.cargaPrevistaStr : '—'}</td><td>${temBatida ? d.trabalhadoStr : '—'}</td>'
+          '<td class="pos">${d.extraMin > 0 ? '+${d.extraStr}' : ''}</td>'
+          '<td class="neg">${d.faltaMin > 0 ? '-${d.faltaStr}' : ''}</td><td class="l">${esc(situacao)}</td></tr>');
+    }
+    final sb = StringBuffer()
+      ..writeln('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8">')
+      ..writeln('<title>Conferência do Dia ${fmtData(dia)}</title><style>')
+      ..writeln('body { font-family: Segoe UI, Arial, sans-serif; font-size: 12px; color: #222; margin: 20px; }')
+      ..writeln('.header { border-bottom: 2px solid #2b579a; padding-bottom: 8px; margin-bottom: 12px; }')
+      ..writeln('.header h2 { margin: 0 0 4px 0; color: #1e395b; } .header p { margin: 2px 0; font-size: 11px; color: #555; }')
+      ..writeln('.cards { display: flex; gap: 10px; margin-bottom: 12px; } .card { background: #f4f6f9; border: 1px solid #d5dbe3; '
+          'border-radius: 4px; padding: 8px 14px; } .card b { display: block; font-size: 16px; }')
+      ..writeln('table { width: 100%; border-collapse: collapse; }')
+      ..writeln('th { background: #2b579a; color: #fff; padding: 6px 4px; font-size: 11px; }')
+      ..writeln('td { border: 1px solid #e1e4e8; padding: 5px 4px; text-align: center; font-size: 11px; } td.l { text-align: left; }')
+      ..writeln('.fds { background-color: #f3f3f3; color: #888; } .falta { background-color: #fdecec; color: #b91c1c; }')
+      ..writeln('.impar { background-color: #fff9db; color: #b45309; } .pos { color: #15803d; } .neg { color: #b91c1c; }')
+      ..writeln('@media print { body { margin: 8mm; } }')
+      ..writeln('</style></head><body>')
+      ..writeln('<div class="header"><h2>Conferência do Dia - ${fmtData(dia)} (${_diasSemana[dia.weekday - 1]})</h2>')
+      ..writeln('<p><b>Empregador:</b> ${esc(razaoEmpresa)} &nbsp;&nbsp; <b>CNPJ/CPF:</b> ${esc(formatarDoc(cnpjEmpresa))}'
+          ' &nbsp;&nbsp; <b>Emitido em:</b> ${fmtData(DateTime.now())} ${fmtHora(DateTime.now())}</p></div>')
+      ..writeln('<div class="cards"><div class="card">Colaboradores<b>${colabs.length}</b></div>'
+          '<div class="card">Com registro<b>$presentes</b></div><div class="card">Sem registro<b>$semRegistro</b></div>'
+          '<div class="card">Batida ímpar<b>$impares</b></div><div class="card">Folga / afastado<b>$folgas</b></div></div>')
+      ..writeln('<table><tr><th>Colaborador</th><th>Jornada</th><th>Batidas</th><th>Previsto</th><th>Trabalhado</th>'
+          '<th>Extra</th><th>Falta / atraso</th><th>Situação</th></tr>')
+      ..write(colabs.isEmpty ? '<tr><td colspan="8">Nenhum colaborador encontrado.</td></tr>' : linhas)
+      ..writeln('</table></body></html>');
     return sb.toString();
   }
 }

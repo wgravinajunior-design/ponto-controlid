@@ -37,6 +37,7 @@ class _FeriadosPageState extends State<FeriadosPage> {
   }
 
   Future<void> _carregar() async {
+    await Db.instance.garantirFeriadosNacionaisFixos();
     final itens = await Db.instance.getFeriados();
     final ano = await Db.instance.feriadosNoPeriodo(DateTime(_ano, 1, 1), DateTime(_ano, 12, 31));
     final emp = await Db.instance.getEmpresaPrincipal();

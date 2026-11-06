@@ -28,6 +28,7 @@ class _BancoHorasPageState extends State<BancoHorasPage> {
     'P': 'Pago em folha',
     'F': 'Folga compensada',
     'A': 'Ajuste',
+    'S': 'Crédito de horas',
   };
 
   @override
@@ -71,31 +72,52 @@ class _BancoHorasPageState extends State<BancoHorasPage> {
   Future<void> _lancar() async {
     final s = _sel;
     if (s == null) return mensagem(context, 'Selecione um colaborador.');
-    var tipo = 'P';
+    var tipo = 'S';
+    var data = DateTime.now();
     final horas = TextEditingController(), desc = TextEditingController();
     final ok = await showDialog<bool>(
       context: context,
       builder: (c) => StatefulBuilder(
         builder: (c, set) => AlertDialog(
-          title: Text('Lançamento no banco de horas - ${s.nome}'),
+          title: Text('Lançamento de horas - ${s.nome}'),
           content: SizedBox(
-            width: 420,
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
+            width: 440,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
               DropdownButtonFormField<String>(
                 initialValue: tipo,
                 decoration: const InputDecoration(labelText: 'Tipo'),
                 items: [
-                  for (final t in ['P', 'F', 'A']) DropdownMenuItem(value: t, child: Text(_tipos[t]!)),
+                  for (final t in ['S', 'P', 'F', 'A']) DropdownMenuItem(value: t, child: Text(_tipos[t]!)),
                 ],
                 onChanged: (v) => set(() => tipo = v!),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.event, size: 18),
+                label: Text('Data: ${fmtData(data)}'),
+                onPressed: () async {
+                  final d = await escolherData(c, data);
+                  if (d != null) set(() => data = d);
+                },
               ),
               const SizedBox(height: 12),
               TextField(
                   controller: horas,
                   decoration: InputDecoration(
-                      labelText: tipo == 'A' ? 'Horas (HH:MM, use - para débito)' : 'Horas (HH:MM)', hintText: '02:30')),
+                      labelText: const ['S', 'A'].contains(tipo)
+                          ? 'Horas (HH:MM; use - na frente para negativo)'
+                          : 'Horas (HH:MM)',
+                      hintText: const ['S', 'A'].contains(tipo) ? '12:30 ou -04:15' : '02:30')),
               const SizedBox(height: 12),
               TextField(controller: desc, decoration: const InputDecoration(labelText: 'Descrição')),
+              if (tipo == 'S')
+                const Padding(
+                  padding: EdgeInsets.only(top: 10),
+                  child: Text(
+                      'Use para trazer o saldo de um sistema anterior ou de um controle manual. O crédito entra no '
+                      'saldo do espelho do período que contém a data e, com banco de horas, no saldo acumulado.',
+                      style: TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+                ),
             ]),
           ),
           actions: [
@@ -108,14 +130,14 @@ class _BancoHorasPageState extends State<BancoHorasPage> {
     if (ok != true) return;
     final txt = horas.text.trim();
     final neg = txt.startsWith('-');
-    var min = horaParaMinutos(txt.replaceAll('-', ''));
+    var min = horaParaMinutos(txt.replaceAll('-', '').trim());
     if (min <= 0) {
       if (mounted) await mensagem(context, 'Informe as horas no formato HH:MM.');
       return;
     }
-    // Pagamento e folga baixam o saldo; ajuste segue o sinal informado
-    if (tipo != 'A' || neg) min = -min;
-    await Db.instance.lancarBancoHoras(s.pessoaId, DateTime.now(), min, tipo,
+    // Pagamento e folga baixam o saldo; crédito e ajuste seguem o sinal informado
+    if (!const ['S', 'A'].contains(tipo) || neg) min = -min;
+    await Db.instance.lancarBancoHoras(s.pessoaId, data, min, tipo,
         desc.text.trim().isEmpty ? _tipos[tipo]! : desc.text.trim());
     _app.logTs('🏦 Banco de horas de ${s.nome}: ${_tipos[tipo]} ${minutosParaHora(min, exibirSinal: true)}.');
     await _carregar();
@@ -143,7 +165,7 @@ class _BancoHorasPageState extends State<BancoHorasPage> {
           ),
         ),
         Btn('Fechar competência no banco', Icons.lock_clock, _fechar),
-        Btn('Novo lançamento', Icons.add, _lancar, tonal: true),
+        Btn('Lançar crédito de horas', Icons.add, _lancar, tonal: true),
         Btn('Atualizar', Icons.refresh, _carregar, tonal: true),
       ]),
       if (_saldos.isNotEmpty && !_saldos.any((s) => s.usaBanco))

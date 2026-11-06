@@ -68,7 +68,7 @@ class _EspelhoPageState extends State<EspelhoPage> {
       });
       if (!silencioso) {
         _app.logTs('🧮 Espelho de ponto apurado para ${e.resumo.colaboradorNome} '
-          '(${fmtData(_ini)} a ${fmtData(_fim)}): saldo ${minutosParaHora(e.resumo.saldoTotalMin, exibirSinal: true)}.');
+          '(${fmtData(_ini)} a ${fmtData(_fim)}): saldo ${minutosParaHora(e.resumo.saldoFinalMin, exibirSinal: true)}.');
       }
     }
   }
@@ -225,9 +225,11 @@ class _EspelhoPageState extends State<EspelhoPage> {
           _resumo('Atrasos', '-${minutosParaHora(r.totalAtrasosMin)}', Colors.red.shade700),
           _resumo('Interv. suprimido', minutosParaHora(r.totalIntervaloSuprimidoMin), Colors.orange.shade800),
           _resumo('Interjornada', minutosParaHora(r.totalInterjornadaMin), Colors.orange.shade800),
-          _resumo(r.usaBancoHoras ? 'Banco de horas' : 'Saldo',
-              minutosParaHora(r.usaBancoHoras ? r.bancoSaldoFinalMin : r.saldoTotalMin, exibirSinal: true),
-              (r.usaBancoHoras ? r.bancoSaldoFinalMin : r.saldoTotalMin) >= 0 ? Colors.green.shade700 : Colors.red.shade700),
+          if (r.creditoHorasMin != 0)
+            _resumo('Crédito lançado', minutosParaHora(r.creditoHorasMin, exibirSinal: true),
+                r.creditoHorasMin >= 0 ? Colors.green.shade700 : Colors.red.shade700),
+          _resumo(r.usaBancoHoras ? 'Banco de horas' : 'Saldo', minutosParaHora(r.saldoFinalMin, exibirSinal: true),
+              r.saldoFinalMin >= 0 ? Colors.green.shade700 : Colors.red.shade700),
         ]),
       ],
       const SizedBox(height: 8),

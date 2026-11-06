@@ -345,7 +345,7 @@ class ContabilidadeService {
         r.dsrDescontados, _qtHoras(r.totalIntervaloSuprimidoMin), _qtHoras(r.totalInterjornadaMin), r.totalFeriadosTrabalhados,
         r.usaBancoHoras ? _qtHoras(r.bancoCreditoMin) : '', r.usaBancoHoras ? _qtHoras(r.bancoDebitoMin) : '',
         r.usaBancoHoras ? minutosParaHora(r.bancoSaldoFinalMin, exibirSinal: true) : '',
-        minutosParaHora(r.saldoTotalMin, exibirSinal: true),
+        minutosParaHora(r.saldoFinalMin, exibirSinal: true),
       ].map((v) => '$v'.replaceAll(';', ',')).join(';'));
       resumo.write('\r\n');
     }

@@ -54,6 +54,11 @@ class FeriadosService {
     final db = Db.instance;
     final res = ResultadoFeriados();
 
+    // Primeiro remove o que foi importado antes para o ano (a UF/município pode ter mudado).
+    // Antes isso rodava DEPOIS dos nacionais e apagava os que acabavam de ser importados (ex.: 02/11 Finados).
+    await db.removerFeriadosImportados(ano);
+    await db.garantirFeriadosNacionaisFixos();
+
     // Nacionais: só entram os que ainda não existem (os fixos já vêm cadastrados e a Sexta-feira Santa é calculada)
     final existentes = await db.feriadosNoPeriodo(DateTime(ano, 1, 1), DateTime(ano, 12, 31));
     for (final f in await _json('$_base/feriados/nacional/json/$ano.json')) {
@@ -64,8 +69,6 @@ class FeriadosService {
       res.nacionais++;
     }
 
-    // Estaduais e municipais: substitui o que foi importado antes para o ano (a UF/município pode ter mudado)
-    await db.removerFeriadosImportados(ano);
     if (uf.isEmpty) {
       res.avisos.add('UF da empresa não informada: feriados estaduais não importados.');
     } else {

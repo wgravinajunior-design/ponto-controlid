@@ -548,24 +548,37 @@ class Db {
     return DateTime(ano, mes, dia);
   }
 
-  Future<void> _semearFeriados() async {
-    if (asInt((await queryOne('SELECT COUNT(*) AS QTD FROM TB_PONTO_FERIADO'))?['QTD']) > 0) return;
-    // Feriados nacionais fixos (Lei 662/49, Lei 6.802/80, Lei 14.759/23)
-    const fixos = [
-      [1, 1, 'Confraternização Universal'],
-      [4, 21, 'Tiradentes'],
-      [5, 1, 'Dia do Trabalho'],
-      [9, 7, 'Independência do Brasil'],
-      [10, 12, 'Nossa Senhora Aparecida'],
-      [11, 2, 'Finados'],
-      [11, 15, 'Proclamação da República'],
-      [11, 20, 'Dia Nacional de Zumbi e da Consciência Negra'],
-      [12, 25, 'Natal'],
-    ];
-    for (final f in fixos) {
+  /// Feriados nacionais fixos (Lei 662/49, Lei 6.802/80, Lei 14.759/23).
+  static const feriadosNacionaisFixos = [
+    [1, 1, 'Confraternização Universal'],
+    [4, 21, 'Tiradentes'],
+    [5, 1, 'Dia do Trabalho'],
+    [9, 7, 'Independência do Brasil'],
+    [10, 12, 'Nossa Senhora Aparecida'],
+    [11, 2, 'Finados'],
+    [11, 15, 'Proclamação da República'],
+    [11, 20, 'Dia Nacional de Zumbi e da Consciência Negra'],
+    [12, 25, 'Natal'],
+  ];
+
+  /// Cadastra os feriados nacionais fixos que estiverem faltando (recorrentes, todo ano).
+  /// Antes só eram semeados com a tabela vazia, e bases antigas ficavam sem alguns (ex.: 02/11).
+  Future<int> garantirFeriadosNacionaisFixos() async {
+    final recorrentes = <String>{
+      for (final f in await getFeriados())
+        if (asStr(f['FER_RECORRENTE']) == 'S' && asDate(f['FER_DATA']) != null)
+          '${asDate(f['FER_DATA'])!.month}-${asDate(f['FER_DATA'])!.day}'
+    };
+    var n = 0;
+    for (final f in feriadosNacionaisFixos) {
+      if (recorrentes.contains('${f[0]}-${f[1]}')) continue;
       await salvarFeriado(0, DateTime(2000, f[0] as int, f[1] as int), f[2] as String, true, 'NACIONAL');
+      n++;
     }
+    return n;
   }
+
+  Future<void> _semearFeriados() => garantirFeriadosNacionaisFixos();
 
   // ======================= Banco de horas =======================
 

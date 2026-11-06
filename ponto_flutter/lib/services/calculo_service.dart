@@ -51,7 +51,12 @@ class ResumoEspelho {
   bool usaBancoHoras = false;
   int bancoCreditoMin = 0, bancoDebitoMin = 0, bancoSaldoAnteriorMin = 0;
   int get bancoSaldoPeriodoMin => bancoCreditoMin - bancoDebitoMin;
-  int get bancoSaldoFinalMin => bancoSaldoAnteriorMin + bancoSaldoPeriodoMin;
+  int get bancoSaldoFinalMin => bancoSaldoAnteriorMin + bancoSaldoPeriodoMin + creditoHorasMin;
+  // Créditos/débitos de horas lançados manualmente com data no período (saldo de sistema anterior, ajustes...)
+  int creditoHorasMin = 0;
+
+  /// Saldo final exibido: banco de horas acumulado ou saldo do período mais os créditos lançados nele.
+  int get saldoFinalMin => usaBancoHoras ? bancoSaldoFinalMin : saldoTotalMin + creditoHorasMin;
 
   /// Extras 50% e atrasos que vão para a folha (fora do banco de horas).
   int get extras50FolhaMin => usaBancoHoras ? 0 : totalExtras50Min;
@@ -151,10 +156,13 @@ class EspelhoPonto {
       ..writeln(card('Interjornada < 11h', minutosParaHora(r.totalInterjornadaMin)))
       ..writeln(card('DSR descontados', '${r.dsrDescontados}', r.dsrDescontados > 0 ? 'val-neg' : ''))
       ..writeln(card('Abonado', minutosParaHora(r.totalAbonadoMin)))
+      ..writeln(r.creditoHorasMin == 0
+          ? ''
+          : card('Crédito de horas lançado', minutosParaHora(r.creditoHorasMin, exibirSinal: true),
+              r.creditoHorasMin >= 0 ? 'val-pos' : 'val-neg'))
       ..writeln(card(
           r.usaBancoHoras ? 'Banco de horas (saldo)' : 'Saldo do período',
-          minutosParaHora(r.usaBancoHoras ? r.bancoSaldoFinalMin : r.saldoTotalMin, exibirSinal: true),
-          (r.usaBancoHoras ? r.bancoSaldoFinalMin : r.saldoTotalMin) >= 0 ? 'val-pos' : 'val-neg'))
+          minutosParaHora(r.saldoFinalMin, exibirSinal: true), r.saldoFinalMin >= 0 ? 'val-pos' : 'val-neg'))
       ..writeln('</div><div class="signatures"><div><div class="sign-line">Assinatura do Colaborador</div></div>'
           '<div><div class="sign-line">Assinatura do Gestor / RH</div></div></div>')
       ..writeln('</body></html>');
@@ -189,7 +197,7 @@ int minutosNoturnos(DateTime ini, DateTime fim, {bool prorrogacao = true}) {
 class _Jornada {
   String descricao = 'Comercial 44h (Padrao)';
   int tolerancia = 10, carga = 528, intervaloMin = 60;
-  bool trabalhaSabado = false, bancoHoras = false;
+  bool trabalhaSabado = false, bancoHoras = false, compensaSabado = false;
   String e1 = '', s1 = '', e2 = '', s2 = '', sabE1 = '', sabS1 = '';
   String escala = 'SEMANAL';
   DateTime? escalaInicio;
@@ -245,6 +253,7 @@ class PontoCalculoService {
         ..tolerancia = asInt(h['HOR_TOLERANCIA_MIN']) > 0 ? asInt(h['HOR_TOLERANCIA_MIN']) : 10
         ..carga = asInt(h['HOR_CARGA_DIARIA_MIN']) > 0 ? asInt(h['HOR_CARGA_DIARIA_MIN']) : 528
         ..trabalhaSabado = asStr(h['HOR_TRABALHA_SABADO']) == 'S'
+        ..compensaSabado = asStr(h['HOR_COMPENSA_SABADO']) == 'S'
         ..e1 = asStr(h['HOR_ENTRADA_1'])
         ..s1 = asStr(h['HOR_SAIDA_1'])
         ..e2 = asStr(h['HOR_ENTRADA_2'])
@@ -276,9 +285,18 @@ class PontoCalculoService {
     r
       ..jornadaDescricao = j.descricao
       ..usaBancoHoras = j.bancoHoras;
-    if (j.bancoHoras) {
-      final lanc = await db.getBancoHoras(pessoaId: pessoaId, ate: ini.subtract(const Duration(days: 1)));
-      r.bancoSaldoAnteriorMin = lanc.fold<int>(0, (s, l) => s + asInt(l['BH_MINUTOS']));
+    // Lançamentos de horas: tudo antes do período forma o saldo anterior do banco; os manuais
+    // (crédito de horas, ajuste, pagamento, folga) com data dentro do período entram no saldo dele.
+    // Créditos/débitos apurados (C/D) do período não entram: são o próprio cálculo já fechado.
+    for (final l in await db.getBancoHoras(pessoaId: pessoaId, ate: fim)) {
+      final d = asDate(l['BH_DATA']);
+      if (d == null) continue;
+      final m = asInt(l['BH_MINUTOS']);
+      if (soData(d).isBefore(ini)) {
+        if (j.bancoHoras) r.bancoSaldoAnteriorMin += m;
+      } else if (!const ['C', 'D'].contains(asStr(l['BH_TIPO']))) {
+        r.creditoHorasMin += m;
+      }
     }
 
     // 3. Batidas (um dia antes e depois, para turno noturno e interjornada) agrupadas por dia de trabalho
@@ -359,9 +377,12 @@ class PontoCalculoService {
       } else if (cfgDia != null && fer == null && !j.e12x36) {
         // Jornada específica deste dia da semana
         if (asStr(cfgDia['HDI_FOLGA']) == 'S') {
+          final sabComp = dia.weekday == DateTime.saturday && j.compensaSabado;
           it
-            ..tipoDia = dia.weekday == DateTime.sunday ? TipoDia.domingoDsr : TipoDia.folga
-            ..alertas.add(dia.weekday == DateTime.sunday ? 'DSR / Folga' : 'Folga semanal');
+            ..tipoDia = dia.weekday == DateTime.sunday
+                ? TipoDia.domingoDsr
+                : (sabComp ? TipoDia.sabadoCompensado : TipoDia.folga)
+            ..alertas.add(dia.weekday == DateTime.sunday ? 'DSR / Folga' : (sabComp ? 'Sabado Compensado' : 'Folga semanal'));
         } else {
           programado = [
             asStr(cfgDia['HDI_ENTRADA_1']), asStr(cfgDia['HDI_SAIDA_1']), asStr(cfgDia['HDI_ENTRADA_2']), asStr(cfgDia['HDI_SAIDA_2'])

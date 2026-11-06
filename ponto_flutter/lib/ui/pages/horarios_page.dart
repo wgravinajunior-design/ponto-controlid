@@ -23,7 +23,10 @@ class _HorariosPageState extends State<HorariosPage> {
   bool _compensaSab = true, _trabalhaSab = false, _ativo = true;
   String _escala = 'SEMANAL';
   final _cicloTrab = TextEditingController(text: '6'), _cicloFolga = TextEditingController(text: '1');
-  int _diasConfigurados = 0;
+  // Jornada semanal por dia (1 = segunda ... 7 = domingo): entrada, saída almoço, volta almoço, saída
+  static const _nomesDias = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+  final _dia = {for (var d = 1; d <= 7; d++) d: List.generate(4, (_) => TextEditingController())};
+  final _folgaDia = {for (var d = 1; d <= 7; d++) d: d >= 6};
   DateTime? _escalaInicio;
   bool _bancoHoras = false;
   final _virada = TextEditingController(text: '00:00'), _intervalo = TextEditingController(text: '60');
@@ -65,7 +68,53 @@ class _HorariosPageState extends State<HorariosPage> {
         _bancoHoras = false;
         _virada.text = '00:00';
         _intervalo.text = '60';
+        _preencherDiasPadrao();
       });
+
+  /// Grade semanal a partir dos campos gerais (cadastros antigos ou novo horário).
+  void _preencherDiasPadrao() {
+    for (var d = 1; d <= 7; d++) {
+      final c = _dia[d]!;
+      if (d <= 5) {
+        _folgaDia[d] = false;
+        _setDia(c, _e1.text, _s1.text, _e2.text, _s2.text);
+      } else if (d == 6 && _trabalhaSab) {
+        _folgaDia[d] = false;
+        _setDia(c, _sabE1.text, _sabS1.text, '', '');
+      } else {
+        _folgaDia[d] = true;
+        _setDia(c, '', '', '', '');
+      }
+    }
+  }
+
+  /// Converte os 4 horários gravados (1ª ent/saí, 2ª ent/saí) para Entrada / Saída almoço / Volta almoço / Saída.
+  void _setDia(List<TextEditingController> c, String e1, String s1, String e2, String s2) {
+    final semAlmoco = e2.trim().isEmpty && s2.trim().isEmpty;
+    c[0].text = e1;
+    c[1].text = semAlmoco ? '' : s1;
+    c[2].text = semAlmoco ? '' : e2;
+    c[3].text = semAlmoco ? s1 : s2;
+  }
+
+  /// Horários do dia no formato gravado: [1ª entrada, 1ª saída, 2ª entrada, 2ª saída].
+  List<String> _gravadoDia(int d) {
+    final v = _dia[d]!.map((t) => t.text.trim()).toList();
+    final temAlmoco = v[1].isNotEmpty || v[2].isNotEmpty;
+    return temAlmoco ? [v[0], v[1], v[2], v[3]] : [v[0], v[3], '', ''];
+  }
+
+  int _cargaDia(int d) {
+    if (_folgaDia[d]!) return 0;
+    final g = _gravadoDia(d);
+    int par(String a, String b) {
+      if (parseHora(a) == null || parseHora(b) == null) return 0;
+      final x = horaParaMinutos(b) - horaParaMinutos(a);
+      return x >= 0 ? x : x + 1440; // passa da meia-noite
+    }
+
+    return par(g[0], g[1]) + par(g[2], g[3]);
+  }
 
   void _preencher(DbRow r) => setState(() {
         _sel = r;
@@ -86,13 +135,24 @@ class _HorariosPageState extends State<HorariosPage> {
         _escala = const ['12X36', 'CICLO'].contains(esc) ? esc : 'SEMANAL';
         _cicloTrab.text = asInt(r['HOR_CICLO_TRABALHO']) > 0 ? '${asInt(r['HOR_CICLO_TRABALHO'])}' : '6';
         _cicloFolga.text = asInt(r['HOR_CICLO_FOLGA']) > 0 ? '${asInt(r['HOR_CICLO_FOLGA'])}' : '1';
-        Db.instance.getHorarioDias(asInt(r['HOR_ID'])).then((d) {
-          if (mounted) setState(() => _diasConfigurados = d.length);
-        });
         _escalaInicio = asDate(r['HOR_ESCALA_INICIO']);
         _bancoHoras = asStr(r['HOR_BANCO_HORAS']) == 'S';
         _virada.text = asStr(r['HOR_VIRADA_DIA']).isEmpty ? '00:00' : asStr(r['HOR_VIRADA_DIA']);
         _intervalo.text = '${asInt(r['HOR_INTERVALO_MIN']) > 0 ? asInt(r['HOR_INTERVALO_MIN']) : 60}';
+        _preencherDiasPadrao();
+        final idSel = asInt(r['HOR_ID']);
+        Db.instance.getHorarioDias(idSel).then((dias) {
+          if (!mounted || _id != idSel || dias.isEmpty) return;
+          setState(() {
+            for (final e in dias.entries) {
+              if (!_dia.containsKey(e.key)) continue;
+              final x = e.value;
+              _folgaDia[e.key] = asStr(x['HDI_FOLGA']) == 'S';
+              _setDia(_dia[e.key]!, asStr(x['HDI_ENTRADA_1']), asStr(x['HDI_SAIDA_1']), asStr(x['HDI_ENTRADA_2']),
+                  asStr(x['HDI_SAIDA_2']));
+            }
+          });
+        });
       });
 
   /// Carga diária calculada pelos intervalos informados.
@@ -109,6 +169,42 @@ class _HorariosPageState extends State<HorariosPage> {
     if (_desc.text.trim().isEmpty) {
       await mensagem(context, 'Informe a descrição do horário.');
       return false;
+    }
+    final semanal = _escala == 'SEMANAL';
+    if (semanal) {
+      for (var d = 1; d <= 7; d++) {
+        if (_folgaDia[d]!) continue;
+        final v = _dia[d]!.map((t) => t.text.trim()).toList();
+        final nome = _nomesDias[d - 1];
+        if (v.any((x) => x.isNotEmpty && parseHora(x) == null)) {
+          await mensagem(context, 'Horário inválido em $nome. Utilize o formato HH:MM.');
+          return false;
+        }
+        if (v[0].isEmpty || v[3].isEmpty) {
+          await mensagem(context, 'Informe a entrada e a saída de $nome (ou marque o dia como folga).');
+          return false;
+        }
+        if (v[1].isEmpty != v[2].isEmpty) {
+          await mensagem(context, 'Informe a saída e a volta do almoço de $nome (ou deixe as duas em branco).');
+          return false;
+        }
+      }
+      final trabalhados = [for (var d = 1; d <= 7; d++) if (!_folgaDia[d]!) d];
+      if (trabalhados.isEmpty) {
+        await mensagem(context, 'Informe ao menos um dia de trabalho na semana.');
+        return false;
+      }
+      // Campos gerais (envio ao relógio e compatibilidade) = primeiro dia trabalhado da semana
+      final g = _gravadoDia(trabalhados.first);
+      _e1.text = g[0];
+      _s1.text = g[1];
+      _e2.text = g[2];
+      _s2.text = g[3];
+      _carga.text = minutosParaHora(_cargaDia(trabalhados.first));
+      _trabalhaSab = !_folgaDia[6]!;
+      final sab = _gravadoDia(6);
+      _sabE1.text = _trabalhaSab ? sab[0] : '';
+      _sabS1.text = _trabalhaSab ? (sab[3].isNotEmpty ? sab[3] : sab[1]) : '';
     }
     for (final c in [_e1, _s1, _e2, _s2, _sabE1, _sabS1]) {
       if (c.text.trim().isNotEmpty && parseHora(c.text) == null) {
@@ -127,6 +223,15 @@ class _HorariosPageState extends State<HorariosPage> {
           int.tryParse(_intervalo.text) ?? 60, _bancoHoras);
       await Db.instance.salvarCicloHorario(_id, _escala == 'CICLO' ? int.tryParse(_cicloTrab.text) ?? 0 : 0,
           _escala == 'CICLO' ? int.tryParse(_cicloFolga.text) ?? 0 : 0);
+      if (semanal) {
+        await Db.instance.salvarHorarioDias(_id, {
+          for (var d = 1; d <= 7; d++)
+            d: (() {
+              final g = _folgaDia[d]! ? ['', '', '', ''] : _gravadoDia(d);
+              return (e1: g[0], s1: g[1], e2: g[2], s2: g[3], carga: _cargaDia(d), folga: _folgaDia[d]!);
+            })()
+        });
+      }
       _app.logTs('💾 Horário [${_desc.text.trim()}] salvo com sucesso (ID $_id).');
       _app.dadosAlterados();
       await _carregar();
@@ -137,101 +242,84 @@ class _HorariosPageState extends State<HorariosPage> {
     }
   }
 
-  /// Jornada específica por dia da semana (ex.: sexta mais curta, sábado meio período, folga fixa).
-  Future<void> _editarDias() async {
-    const nomes = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
-    final atuais = await Db.instance.getHorarioDias(_id);
-    final usar = <int, bool>{}, folga = <int, bool>{};
-    final ctrl = <int, List<TextEditingController>>{};
-    for (var d = 1; d <= 7; d++) {
-      final r = atuais[d];
-      usar[d] = r != null;
-      folga[d] = r == null ? d == 7 : asStr(r['HDI_FOLGA']) == 'S';
-      final padrao = d == 6 ? [_sabE1.text, _sabS1.text, '', ''] : [_e1.text, _s1.text, _e2.text, _s2.text];
-      ctrl[d] = [
-        for (var k = 0; k < 4; k++)
-          TextEditingController(
-              text: r == null ? padrao[k] : asStr(r[['HDI_ENTRADA_1', 'HDI_SAIDA_1', 'HDI_ENTRADA_2', 'HDI_SAIDA_2'][k]]))
-      ];
-    }
-    if (!mounted) return;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (c) => StatefulBuilder(
-        builder: (c, set) => AlertDialog(
-          title: const Text('Jornada por dia da semana'),
-          content: SizedBox(
-            width: 720,
-            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-              const Text('Marque os dias com horário diferente do geral. Dias não marcados seguem a jornada geral '
-                  '(segunda a sexta), o sábado e o domingo da configuração normal.',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),
-              const SizedBox(height: 12),
-              for (var d = 1; d <= 7; d++)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(children: [
-                    SizedBox(
-                      width: 130,
-                      child: CheckboxListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: Text(nomes[d - 1]),
-                        value: usar[d],
-                        onChanged: (v) => set(() => usar[d] = v!),
-                      ),
-                    ),
-                    SizedBox(
-                      width: 90,
-                      child: CheckboxListTile(
-                        dense: true,
-                        contentPadding: EdgeInsets.zero,
-                        controlAffinity: ListTileControlAffinity.leading,
-                        title: const Text('Folga'),
-                        value: folga[d],
-                        onChanged: usar[d]! ? (v) => set(() => folga[d] = v!) : null,
-                      ),
-                    ),
-                    for (var k = 0; k < 4; k++)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 8),
-                        child: SizedBox(
-                          width: 105,
-                          child: TextField(
-                            controller: ctrl[d]![k],
-                            enabled: usar[d]! && !folga[d]!,
-                            decoration: InputDecoration(
-                                labelText: ['1ª Ent', '1ª Saí', '2ª Ent', '2ª Saí'][k], hintText: 'HH:MM', isDense: true),
-                          ),
-                        ),
-                      ),
-                  ]),
-                ),
-            ]),
+  /// Copia a jornada de segunda para terça a sexta.
+  void _copiarSegunda() => setState(() {
+        for (var d = 2; d <= 5; d++) {
+          _folgaDia[d] = _folgaDia[1]!;
+          for (var k = 0; k < 4; k++) {
+            _dia[d]![k].text = _dia[1]![k].text;
+          }
+        }
+      });
+
+  Widget _gradeSemanal() {
+    const cab = TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF475569));
+    Widget celula(TextEditingController c, bool ativo) => SizedBox(
+          width: 92,
+          child: TextField(
+            controller: c,
+            enabled: ativo,
+            onChanged: (_) => setState(() {}),
+            textAlign: TextAlign.center,
+            decoration: const InputDecoration(hintText: 'HH:MM', isDense: true),
           ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
-            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Salvar')),
-          ],
-        ),
-      ),
-    );
-    if (ok != true) return;
-    final dias = <int, ({String e1, String s1, String e2, String s2, int carga, bool folga})>{};
+        );
+    var semana = 0;
     for (var d = 1; d <= 7; d++) {
-      if (!usar[d]!) continue;
-      final v = ctrl[d]!.map((t) => t.text.trim()).toList();
-      if (!folga[d]! && v.any((x) => x.isNotEmpty && parseHora(x) == null)) {
-        if (mounted) await mensagem(context, 'Horário inválido em ${nomes[d - 1]}. Use HH:MM.');
-        return;
-      }
-      dias[d] = (e1: v[0], s1: v[1], e2: v[2], s2: v[3], carga: 0, folga: folga[d]!);
+      semana += _cargaDia(d);
     }
-    await Db.instance.salvarHorarioDias(_id, dias);
-    _app.logTs('🗓️ Jornada por dia da semana salva para o horário #$_id (${dias.length} dia(s)).');
-    _app.dadosAlterados();
-    setState(() => _diasConfigurados = dias.length);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Text('Jornada da semana', style: TextStyle(fontWeight: FontWeight.w600)),
+        const Spacer(),
+        TextButton.icon(
+            icon: const Icon(Icons.copy_all, size: 16),
+            label: const Text('Copiar segunda para terça a sexta'),
+            onPressed: _copiarSegunda),
+      ]),
+      const SizedBox(height: 6),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Row(children: [
+            SizedBox(width: 80, child: Text('Dia', style: cab)),
+            SizedBox(width: 56, child: Text('Folga', style: cab)),
+            SizedBox(width: 100, child: Text('Entrada', style: cab)),
+            SizedBox(width: 100, child: Text('Saída almoço', style: cab)),
+            SizedBox(width: 100, child: Text('Volta almoço', style: cab)),
+            SizedBox(width: 100, child: Text('Saída', style: cab)),
+            SizedBox(width: 60, child: Text('Carga', style: cab)),
+          ]),
+          for (var d = 1; d <= 7; d++)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                SizedBox(width: 80, child: Text(_nomesDias[d - 1])),
+                SizedBox(
+                  width: 56,
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Checkbox(value: _folgaDia[d], onChanged: (v) => setState(() => _folgaDia[d] = v!)),
+                  ),
+                ),
+                for (var k = 0; k < 4; k++)
+                  Padding(padding: const EdgeInsets.only(right: 8), child: celula(_dia[d]![k], !_folgaDia[d]!)),
+                SizedBox(
+                  width: 60,
+                  child: Text(_folgaDia[d]! ? 'Folga' : minutosParaHora(_cargaDia(d)),
+                      style: TextStyle(color: _folgaDia[d]! ? Colors.grey : null, fontWeight: FontWeight.w600)),
+                ),
+              ]),
+            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 6),
+            child: Text('Total semanal: ${minutosParaHora(semana)}   •   Sem almoço: deixe "Saída almoço" e '
+                '"Volta almoço" em branco.',
+                style: const TextStyle(fontSize: 11, color: Color(0xFF64748B))),
+          ),
+        ]),
+      ),
+    ]);
   }
 
   Future<void> _salvarEnviar() async {
@@ -301,36 +389,8 @@ class _HorariosPageState extends State<HorariosPage> {
           Expanded(
             child: SingleChildScrollView(
               child: Secao(_id > 0 ? 'Horário #$_id' : 'Novo horário', [
-                Wrap(spacing: 10, runSpacing: 12, children: [
-                  Campo('Descrição', _desc, largura: wf),
-                  Campo('1ª Entrada', _e1, largura: wHora, dica: 'HH:MM'),
-                  Campo('1ª Saída', _s1, largura: wHora, dica: 'HH:MM'),
-                  Campo('2ª Entrada', _e2, largura: wHora, dica: 'HH:MM'),
-                  Campo('2ª Saída', _s2, largura: wHora, dica: 'HH:MM'),
-                  Campo('Carga diária', _carga, largura: wHora, dica: 'HH:MM'),
-                  IconButton(
-                      tooltip: 'Calcular carga pelos intervalos', onPressed: _calcularCarga, icon: const Icon(Icons.calculate)),
-                  Campo('Tolerância (min)', _tol, largura: wHora),
-                ]),
-                const SizedBox(height: 8),
-                CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Compensa sábado (jornada de 44h em 5 dias)'),
-                    value: _compensaSab,
-                    onChanged: (v) => setState(() => _compensaSab = v!)),
-                CheckboxListTile(
-                    dense: true,
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Trabalha aos sábados'),
-                    value: _trabalhaSab,
-                    onChanged: (v) => setState(() => _trabalhaSab = v!)),
-                if (_trabalhaSab)
-                  Wrap(spacing: 10, children: [
-                    Campo('Sábado entrada', _sabE1, largura: wMeio, dica: 'HH:MM'),
-                    Campo('Sábado saída', _sabS1, largura: wMeio, dica: 'HH:MM'),
-                  ]),
-                const Divider(height: 20),
+                Campo('Descrição', _desc, largura: wf),
+                const SizedBox(height: 12),
                 const Text('Regras da jornada', style: TextStyle(fontWeight: FontWeight.w600)),
                 const SizedBox(height: 10),
                 SegmentedButton<String>(
@@ -343,6 +403,30 @@ class _HorariosPageState extends State<HorariosPage> {
                   onSelectionChanged: (s) => setState(() => _escala = s.first),
                 ),
                 const SizedBox(height: 12),
+                if (_escala == 'SEMANAL') ...[
+                  _gradeSemanal(),
+                  const SizedBox(height: 8),
+                  Campo('Tolerância (min)', _tol, largura: wHora),
+                  CheckboxListTile(
+                      dense: true,
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text('Sábado de folga é compensado na semana (44h em 5 dias)'),
+                      value: _compensaSab,
+                      onChanged: (v) => setState(() => _compensaSab = v!)),
+                ] else
+                  Wrap(spacing: 10, runSpacing: 12, children: [
+                    Campo('1ª Entrada', _e1, largura: wHora, dica: 'HH:MM'),
+                    Campo('1ª Saída', _s1, largura: wHora, dica: 'HH:MM'),
+                    Campo('2ª Entrada', _e2, largura: wHora, dica: 'HH:MM'),
+                    Campo('2ª Saída', _s2, largura: wHora, dica: 'HH:MM'),
+                    Campo('Carga diária', _carga, largura: wHora, dica: 'HH:MM'),
+                    IconButton(
+                        tooltip: 'Calcular carga pelos intervalos',
+                        onPressed: _calcularCarga,
+                        icon: const Icon(Icons.calculate)),
+                    Campo('Tolerância (min)', _tol, largura: wHora),
+                  ]),
+                const Divider(height: 20),
                 Wrap(spacing: 10, runSpacing: 12, crossAxisAlignment: WrapCrossAlignment.center, children: [
                   if (_escala == 'CICLO') ...[
                     Campo('Dias de trabalho', _cicloTrab, largura: wMeio),
@@ -360,17 +444,6 @@ class _HorariosPageState extends State<HorariosPage> {
                   Campo('Intervalo mínimo (min)', _intervalo, largura: wMeio),
                   Campo('Virada do dia', _virada, largura: wMeio, dica: 'HH:MM'),
                 ]),
-                if (_escala == 'SEMANAL')
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8),
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.view_week, size: 18),
-                      label: Text(_diasConfigurados > 0
-                          ? 'Jornada por dia da semana ($_diasConfigurados dia(s) configurado(s))'
-                          : 'Jornada diferente por dia da semana'),
-                      onPressed: _id > 0 ? _editarDias : null,
-                    ),
-                  ),
                 const Padding(
                   padding: EdgeInsets.only(top: 6),
                   child: Text('Virada do dia: batidas antes deste horário contam no dia anterior (turno noturno, ex.: 12:00).',

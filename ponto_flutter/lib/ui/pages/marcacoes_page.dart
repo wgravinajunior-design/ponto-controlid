@@ -213,6 +213,58 @@ class _MarcacoesPageState extends State<MarcacoesPage> {
     _app.logTs('🖨️ Relatório de Entradas e Saídas gerado: $arq');
   }
 
+  /// Conferência do dia: sempre abre com a data de hoje e todos os colaboradores.
+  Future<void> _conferencia() async {
+    var dia = DateTime.now();
+    var pessoa = 0;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (c) => StatefulBuilder(
+        builder: (c, set) => AlertDialog(
+          title: const Text('Relatório de conferência'),
+          content: SizedBox(
+            width: 380,
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              OutlinedButton.icon(
+                icon: const Icon(Icons.calendar_month, size: 18),
+                label: Text('Dia ${fmtData(dia)}'),
+                onPressed: () async {
+                  final d = await escolherData(c, dia);
+                  if (d != null) set(() => dia = d);
+                },
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<int>(
+                initialValue: pessoa,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Colaborador'),
+                items: [
+                  const DropdownMenuItem(value: 0, child: Text('Todos os Colaboradores')),
+                  for (final x in _colabs)
+                    DropdownMenuItem(value: asInt(x['PES_ID']), child: Text(asStr(x['PES_RSOCIAL_NOME'])))
+                ],
+                onChanged: (v) => set(() => pessoa = v ?? 0),
+              ),
+            ]),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancelar')),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text('Gerar')),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    final emp = await Db.instance.getEmpresaPrincipal();
+    if (!mounted) return;
+    final html = await comProgresso(
+        context, () => RelatorioPonto.gerarConferenciaDiaHtml(dia, pessoa, emp?.razao ?? '', emp?.cnpj ?? ''),
+        texto: 'Gerando conferência...');
+    if (html == null) return;
+    final arq = await abrirHtml('Conferencia_${DateFormat('yyyyMMdd').format(dia)}.html', html);
+    _app.logTs('🖨️ Relatório de conferência de ${fmtData(dia)} gerado: $arq');
+  }
+
   Widget _data(String rotulo, DateTime valor, ValueChanged<DateTime> onChanged) => OutlinedButton.icon(
         icon: const Icon(Icons.calendar_month, size: 18),
         label: Text('$rotulo ${fmtData(valor)}'),
@@ -274,6 +326,7 @@ class _MarcacoesPageState extends State<MarcacoesPage> {
         ),
         Btn('Exportar TXT', Icons.file_download, _exportar, tonal: true),
         Btn('Relatório E/S', Icons.print, _relatorioES, cor: AppCores.roxo),
+        Btn('Conferência do dia', Icons.fact_check, _conferencia, cor: AppCores.roxo),
         Btn('Importar AFD (pendrive)', Icons.usb_rounded, () async {
           if (await importarAfdDoPendrive(context)) _filtrar();
         }, cor: Colors.teal),
