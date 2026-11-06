@@ -6,9 +6,9 @@
 interface
 
 const
-  BUILD_VERSION = '1.0.3';
-  BUILD_NUMBER = 3;
-  BUILD_DATE = '03/11/2026 18:15';
+  BUILD_VERSION = '1.0.4';
+  BUILD_NUMBER = 4;
+  BUILD_DATE = '06/11/2026 13:47';
 
 implementation
 
