@@ -12,10 +12,28 @@ uses
   uPontoCalculoService in 'uPontoCalculoService.pas',
   uPontoService in 'uPontoService.pas',
   uSkiaButtons in 'uSkiaButtons.pas',
+  uBiometriaHamster in 'uBiometriaHamster.pas',
+  uRelatorioPonto in 'uRelatorioPonto.pas',
+  uFrmTerminalPonto in 'uFrmTerminalPonto.pas',
+  uFrmLogin in 'uFrmLogin.pas',
   uFrmUpdate in 'uFrmUpdate.pas' {frmUpdate},
   uFrmMain in 'uFrmMain.pas' {frmMain};
 
 {$R *.res}
+
+var
+  UsuarioNome: string;
+  UsuarioAdmin: Boolean;
+
+// Log do terminal quando ele roda sem a tela principal (usuário não administrador)
+procedure LogTerminal(const AMsg: string; AIsError: Boolean = False);
+begin
+  try
+    TFile.AppendAllText(TPath.Combine(ExtractFilePath(ParamStr(0)), 'terminal.log'),
+      FormatDateTime('dd/mm/yyyy hh:nn:ss', Now) + '  ' + AMsg + sLineBreak, TEncoding.UTF8);
+  except
+  end;
+end;
 
 begin
   try
@@ -30,8 +48,18 @@ begin
       end;
     end;
     Application.CreateForm(TdmDados, dmDados);
-    Application.CreateForm(TfrmMain, frmMain);
-    Application.Run;
+
+    if not ExecutarLogin(UsuarioNome, UsuarioAdmin) then
+      Exit;
+
+    if UsuarioAdmin then
+    begin
+      Application.CreateForm(TfrmMain, frmMain);
+      frmMain.Caption := frmMain.Caption + '  -  Usuário: ' + UsuarioNome;
+      Application.Run;
+    end
+    else
+      ExecutarTerminalPontoExclusivo(LogTerminal);
   except
     on E: Exception do
     begin

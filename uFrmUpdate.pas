@@ -6,7 +6,7 @@ uses
   Winapi.Windows, Winapi.Messages, Winapi.ShellAPI,
   System.SysUtils, System.Variants, System.Classes, System.UITypes, System.DateUtils,
   System.Generics.Collections, System.RegularExpressions,
-  System.JSON, System.Net.HttpClient, System.Net.HttpClientComponent,
+  System.JSON, System.Net.HttpClient, System.Net.HttpClientComponent, System.IOUtils, System.Zip,
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls,
   Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg,
   uConfig, uSkiaButtons;
@@ -59,6 +59,8 @@ type
   public
     class function ChecarAtualizacao(out AInfo: TUpdateInfo): Boolean; static;
     class function CompararVersoes(const V1, V2: string): Integer; static;
+    // Baixa o asset Instaladores.zip (driver/SDK do Hamster DX) da última release e extrai em ADestino
+    class function BaixarPacoteInstaladores(const ADestino: string; out AErro: string): Boolean; static;
     class procedure ExecutarAtualizacao(AOwner: TComponent; const AInfo: TUpdateInfo;
       AAutomatico: Boolean = False); static;
     property UpdateInfo: TUpdateInfo read FUpdateInfo write SetUpdateInfo;
@@ -144,15 +146,109 @@ begin
     Result := Format('%d B', [ABytes]);
 end;
 
-class function TfrmUpdate.ChecarAtualizacao(out AInfo: TUpdateInfo): Boolean;
+// Última release do sistema Delphi (tag "v1.0.3"). O repositório também publica as releases do
+// Go Up Ponto em Flutter (tag "v2.0.0-b3"), por isso não se usa "releases/latest".
+// Devolve o JSON da release ou '' (AStatus traz o HTTP, ou 404 se nenhuma release servir).
+function UltimaReleaseDelphi(AClient: THTTPClient; out AStatus: Integer): string;
+var
+  Resp: IHTTPResponse;
+  Lista: TJSONValue;
+  Item: TJSONValue;
+begin
+  Result := '';
+  Resp := AClient.Get(Format('https://api.github.com/repos/%s/%s/releases?per_page=30', [GITHUB_OWNER, GITHUB_REPO]));
+  AStatus := Resp.StatusCode;
+  if AStatus <> 200 then
+    Exit;
+  AStatus := 404;
+  Lista := TJSONObject.ParseJSONValue(Resp.ContentAsString(TEncoding.UTF8));
+  try
+    if Lista is TJSONArray then
+      for Item in Lista as TJSONArray do
+        if not Item.GetValue<Boolean>('draft', False) and not Item.GetValue<Boolean>('prerelease', False)
+          and TRegEx.IsMatch(Item.GetValue<string>('tag_name', ''), '^[vV]d+(.d+)*$') then
+        begin
+          Result := Item.ToJSON;
+          AStatus := 200;
+          Break;
+        end;
+  finally
+    Lista.Free;
+  end;
+end;
+
+class function TfrmUpdate.BaixarPacoteInstaladores(const ADestino: string; out AErro: string): Boolean;
+const
+  NOME_PACOTE = 'Instaladores.zip';
 var
   Client: THTTPClient;
   Resp: IHTTPResponse;
-  URL, JsonStr, TagStr, AssetName, DownloadUrl: string;
+  JSONVal, AssetVal: TJSONValue;
+  Url, ZipPath: string;
+  Status: Integer;
+  Arquivo: TFileStream;
+begin
+  Result := False;
+  AErro := '';
+  Url := '';
+  Client := THTTPClient.Create;
+  try
+    Client.UserAgent := 'PontoControlID-Updater';
+    try
+      JSONVal := TJSONObject.ParseJSONValue(UltimaReleaseDelphi(Client, Status));
+      if Status <> 200 then
+      begin
+        JSONVal.Free;
+        AErro := Format('GitHub respondeu HTTP %d.', [Status]);
+        Exit;
+      end;
+      try
+        if (JSONVal is TJSONObject) and ((JSONVal as TJSONObject).GetValue('assets') is TJSONArray) then
+          for AssetVal in (JSONVal as TJSONObject).GetValue('assets') as TJSONArray do
+            if SameText(AssetVal.GetValue<string>('name', ''), NOME_PACOTE) then
+              Url := AssetVal.GetValue<string>('browser_download_url', '');
+      finally
+        JSONVal.Free;
+      end;
+      if Url = '' then
+      begin
+        AErro := 'A última versão publicada não tem o pacote ' + NOME_PACOTE + '.';
+        Exit;
+      end;
+
+      ZipPath := TPath.Combine(TPath.GetTempPath, NOME_PACOTE);
+      Arquivo := TFileStream.Create(ZipPath, fmCreate);
+      try
+        Resp := Client.Get(Url, Arquivo);
+      finally
+        Arquivo.Free;
+      end;
+      if Resp.StatusCode <> 200 then
+      begin
+        AErro := Format('Falha ao baixar %s (HTTP %d).', [NOME_PACOTE, Resp.StatusCode]);
+        Exit;
+      end;
+
+      TZipFile.ExtractZipFile(ZipPath, ADestino);
+      DeleteFile(ZipPath);
+      Result := True;
+    except
+      on E: Exception do
+        AErro := E.Message;
+    end;
+  finally
+    Client.Free;
+  end;
+end;
+
+class function TfrmUpdate.ChecarAtualizacao(out AInfo: TUpdateInfo): Boolean;
+var
+  Client: THTTPClient;
+  JsonStr, TagStr, AssetName, DownloadUrl: string;
   JSONVal, AssetObj: TJSONValue;
   RootObj: TJSONObject;
   AssetsArr: TJSONArray;
-  I, CmpVersao: Integer;
+  I, CmpVersao, Status: Integer;
   AssetSize: Int64;
 begin
   Result := False;
@@ -166,7 +262,6 @@ begin
   AInfo.AssetSize := 0;
   AInfo.PublishedAt := '';
 
-  URL := Format('https://api.github.com/repos/%s/%s/releases/latest', [GITHUB_OWNER, GITHUB_REPO]);
   Client := THTTPClient.Create;
   try
     Client.CustomHeaders['User-Agent'] := 'PontoControlID-Updater';
@@ -176,10 +271,9 @@ begin
     Client.ResponseTimeout := 8000;
 
     try
-      Resp := Client.Get(URL);
-      if Resp.StatusCode = 200 then
+      JsonStr := UltimaReleaseDelphi(Client, Status);
+      if Status = 200 then
       begin
-        JsonStr := Resp.ContentAsString(TEncoding.UTF8);
         JSONVal := TJSONObject.ParseJSONValue(JsonStr);
         if Assigned(JSONVal) and (JSONVal is TJSONObject) then
         begin

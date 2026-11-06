@@ -175,7 +175,6 @@ object frmMain: TfrmMain
     Align = alClient
     TabOrder = 1
     OnChange = pgcMainChange
-    ExplicitHeight = 610
     object tabDashboard: TTabSheet
       Caption = '  Painel de Monitoramento  '
       object pnlCards: TPanel
@@ -412,7 +411,6 @@ object frmMain: TfrmMain
         ReadOnly = True
         ScrollBars = ssVertical
         TabOrder = 2
-        ExplicitHeight = 450
       end
     end
     object tabRelogios: TTabSheet
@@ -1436,13 +1434,13 @@ object frmMain: TfrmMain
         Left = 0
         Top = 0
         Width = 1092
-        Height = 580
+        Height = 573
         ActivePage = tabCfgParametros
         Align = alClient
         TabOrder = 0
+        ExplicitHeight = 580
         object tabCfgParametros: TTabSheet
           Caption = '  Geral e Conex'#227'o  '
-          ImageIndex = 0
           object btnIrParaVersoes: TButton
             Left = 455
             Top = 465
@@ -1473,560 +1471,560 @@ object frmMain: TfrmMain
             TabOrder = 6
             OnClick = btnConfigVoltarClick
           end
-      object grpBanco: TGroupBox
-        Left = 30
-        Top = 20
-        Width = 600
-        Height = 280
-        Caption = ' Conex'#227'o com Banco de Dados Firebird '
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -12
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        TabOrder = 0
-        object lblCfgServer: TLabel
-          Left = 20
-          Top = 35
-          Width = 46
-          Height = 15
-          Caption = 'Servidor:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
+          object grpBanco: TGroupBox
+            Left = 30
+            Top = 20
+            Width = 600
+            Height = 280
+            Caption = ' Conex'#227'o com Banco de Dados Firebird '
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 0
+            object lblCfgServer: TLabel
+              Left = 20
+              Top = 35
+              Width = 46
+              Height = 15
+              Caption = 'Servidor:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblCfgPorta: TLabel
+              Left = 390
+              Top = 35
+              Width = 31
+              Height = 15
+              Caption = 'Porta:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblCfgDatabase: TLabel
+              Left = 20
+              Top = 90
+              Width = 130
+              Height = 15
+              Caption = 'Caminho da Base (.FDB):'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblCfgUser: TLabel
+              Left = 20
+              Top = 145
+              Width = 43
+              Height = 15
+              Caption = 'Usu'#225'rio:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblCfgPass: TLabel
+              Left = 240
+              Top = 145
+              Width = 35
+              Height = 15
+              Caption = 'Senha:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblCfgVendor: TLabel
+              Left = 20
+              Top = 200
+              Width = 146
+              Height = 15
+              Caption = 'Biblioteca Cliente (fbclient):'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object edtCfgServer: TEdit
+              Left = 20
+              Top = 55
+              Width = 350
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 0
+            end
+            object edtCfgPorta: TEdit
+              Left = 390
+              Top = 55
+              Width = 100
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 1
+            end
+            object edtCfgDatabase: TEdit
+              Left = 20
+              Top = 110
+              Width = 550
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 2
+            end
+            object edtCfgUser: TEdit
+              Left = 20
+              Top = 165
+              Width = 200
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 3
+            end
+            object edtCfgPass: TEdit
+              Left = 240
+              Top = 165
+              Width = 200
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              PasswordChar = '*'
+              TabOrder = 4
+            end
+            object edtCfgVendor: TEdit
+              Left = 20
+              Top = 220
+              Width = 550
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 5
+            end
+          end
+          object grpColetaAuto: TGroupBox
+            Left = 30
+            Top = 320
+            Width = 600
+            Height = 130
+            Caption = ' Par'#226'metros de Coleta Autom'#225'tica '
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 1
+            object lblIntervalo: TLabel
+              Left = 20
+              Top = 35
+              Width = 184
+              Height = 15
+              Caption = 'Intervalo de Coleta (em segundos):'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object edtIntervalo: TEdit
+              Left = 20
+              Top = 55
+              Width = 120
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 0
+              Text = '60'
+            end
+            object chkAutoIniciar: TCheckBox
+              Left = 20
+              Top = 90
+              Width = 300
+              Height = 19
+              Caption = 'Iniciar Coleta Autom'#225'tica ao abrir o integrador'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 1
+            end
+            object chkAutoAtualizar: TCheckBox
+              Left = 330
+              Top = 90
+              Width = 260
+              Height = 19
+              Caption = 'Atualizar o sistema automaticamente (GitHub)'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 2
+            end
+          end
+          object btnSalvarConfig: TButton
+            Left = 30
+            Top = 465
+            Width = 210
+            Height = 44
+            Caption = 'Salvar Configura'#231#245'es'
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 2
+            OnClick = btnSalvarConfigClick
+          end
+          object btnTestarConexaoFB: TButton
+            Left = 255
+            Top = 465
+            Width = 185
+            Height = 44
+            Caption = 'Testar Conex'#227'o'
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 3
+            OnClick = btnTestarConexaoFBClick
+          end
+          object grpEmpregador: TGroupBox
+            Left = 650
+            Top = 20
+            Width = 500
+            Height = 490
+            Caption = ' Dados do Empregador (Portaria 671 / 1510 MTE) '
+            Font.Charset = DEFAULT_CHARSET
+            Font.Color = clWindowText
+            Font.Height = -12
+            Font.Name = 'Segoe UI'
+            Font.Style = [fsBold]
+            ParentFont = False
+            TabOrder = 4
+            object lblEmpTipoDoc: TLabel
+              Left = 20
+              Top = 28
+              Width = 109
+              Height = 15
+              Caption = 'Tipo de Documento:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblEmpCpfCnpj: TLabel
+              Left = 165
+              Top = 28
+              Width = 155
+              Height = 15
+              Caption = 'CNPJ / CPF do Empregador *:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblEmpRazaoSocial: TLabel
+              Left = 20
+              Top = 80
+              Width = 120
+              Height = 15
+              Caption = 'Raz'#227'o Social / Nome *:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblEmpCpfResp: TLabel
+              Left = 20
+              Top = 132
+              Width = 226
+              Height = 15
+              Caption = 'CPF do Respons'#225'vel (Obrigat'#243'rio p/ CNPJ):'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblEmpCEI: TLabel
+              Left = 260
+              Top = 132
+              Width = 103
+              Height = 15
+              Caption = 'CEI / CNO / CAEPF:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblEmpEndereco: TLabel
+              Left = 20
+              Top = 184
+              Width = 227
+              Height = 15
+              Caption = 'Endere'#231'o / Local da Presta'#231#227'o do Servi'#231'o *:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblEmpRelogioDestino: TLabel
+              Left = 20
+              Top = 236
+              Width = 114
+              Height = 15
+              Caption = 'Enviar para o Rel'#243'gio:'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+            end
+            object lblEmpInfo: TLabel
+              Left = 20
+              Top = 400
+              Width = 460
+              Height = 65
+              AutoSize = False
+              Caption = 
+                'Aten'#231#227'o: O cadastro do empregador '#233' obrigat'#243'rio no rel'#243'gio de po' +
+                'nto para liberar o cadastro de colaboradores.'#13#10'Ao alterar a empr' +
+                'esa, o rel'#243'gio grava um registro fiscal (Portaria 671) e passa a' +
+                ' emitir comprovantes com o novo CNPJ.'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clGrayText
+              Font.Height = -11
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              WordWrap = True
+            end
+            object cmbEmpTipoDoc: TComboBox
+              Left = 20
+              Top = 46
+              Width = 130
+              Height = 23
+              Style = csDropDownList
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ItemIndex = 0
+              ParentFont = False
+              TabOrder = 0
+              Text = '1 - CNPJ'
+              Items.Strings = (
+                '1 - CNPJ'
+                '2 - CPF')
+            end
+            object edtEmpCpfCnpj: TEdit
+              Left = 165
+              Top = 46
+              Width = 315
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 1
+            end
+            object edtEmpRazaoSocial: TEdit
+              Left = 20
+              Top = 98
+              Width = 460
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 2
+            end
+            object edtEmpCpfResp: TEdit
+              Left = 20
+              Top = 150
+              Width = 220
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 3
+            end
+            object edtEmpCEI: TEdit
+              Left = 260
+              Top = 150
+              Width = 220
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 4
+            end
+            object edtEmpEndereco: TEdit
+              Left = 20
+              Top = 202
+              Width = 460
+              Height = 23
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 5
+            end
+            object cmbEmpRelogioDestino: TComboBox
+              Left = 20
+              Top = 254
+              Width = 460
+              Height = 23
+              Style = csDropDownList
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = []
+              ParentFont = False
+              TabOrder = 6
+            end
+            object btnCarregarEmpBanco: TButton
+              Left = 20
+              Top = 295
+              Width = 220
+              Height = 36
+              Caption = 'Carregar do Banco'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 7
+              OnClick = btnCarregarEmpBancoClick
+            end
+            object btnSalvarEmpBanco: TButton
+              Left = 260
+              Top = 295
+              Width = 220
+              Height = 36
+              Caption = 'Salvar no Banco'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 8
+              OnClick = btnSalvarEmpBancoClick
+            end
+            object btnEnviarEmpRelogio: TButton
+              Left = 20
+              Top = 345
+              Width = 220
+              Height = 40
+              Caption = 'Enviar ao Rel'#243'gio'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 9
+              OnClick = btnEnviarEmpRelogioClick
+            end
+            object btnLerEmpRelogio: TButton
+              Left = 260
+              Top = 345
+              Width = 220
+              Height = 40
+              Caption = 'Ler do Rel'#243'gio'
+              Font.Charset = DEFAULT_CHARSET
+              Font.Color = clWindowText
+              Font.Height = -12
+              Font.Name = 'Segoe UI'
+              Font.Style = [fsBold]
+              ParentFont = False
+              TabOrder = 10
+              OnClick = btnLerEmpRelogioClick
+            end
+          end
         end
-        object lblCfgPorta: TLabel
-          Left = 390
-          Top = 35
-          Width = 31
-          Height = 15
-          Caption = 'Porta:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblCfgDatabase: TLabel
-          Left = 20
-          Top = 90
-          Width = 130
-          Height = 15
-          Caption = 'Caminho da Base (.FDB):'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblCfgUser: TLabel
-          Left = 20
-          Top = 145
-          Width = 43
-          Height = 15
-          Caption = 'Usu'#225'rio:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblCfgPass: TLabel
-          Left = 240
-          Top = 145
-          Width = 35
-          Height = 15
-          Caption = 'Senha:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblCfgVendor: TLabel
-          Left = 20
-          Top = 200
-          Width = 146
-          Height = 15
-          Caption = 'Biblioteca Cliente (fbclient):'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object edtCfgServer: TEdit
-          Left = 20
-          Top = 55
-          Width = 350
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 0
-        end
-        object edtCfgPorta: TEdit
-          Left = 390
-          Top = 55
-          Width = 100
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 1
-        end
-        object edtCfgDatabase: TEdit
-          Left = 20
-          Top = 110
-          Width = 550
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 2
-        end
-        object edtCfgUser: TEdit
-          Left = 20
-          Top = 165
-          Width = 200
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 3
-        end
-        object edtCfgPass: TEdit
-          Left = 240
-          Top = 165
-          Width = 200
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          PasswordChar = '*'
-          TabOrder = 4
-        end
-        object edtCfgVendor: TEdit
-          Left = 20
-          Top = 220
-          Width = 550
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 5
-        end
-      end
-      object grpColetaAuto: TGroupBox
-        Left = 30
-        Top = 320
-        Width = 600
-        Height = 130
-        Caption = ' Par'#226'metros de Coleta Autom'#225'tica '
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -12
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        TabOrder = 1
-        object lblIntervalo: TLabel
-          Left = 20
-          Top = 35
-          Width = 184
-          Height = 15
-          Caption = 'Intervalo de Coleta (em segundos):'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object edtIntervalo: TEdit
-          Left = 20
-          Top = 55
-          Width = 120
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 0
-          Text = '60'
-        end
-        object chkAutoIniciar: TCheckBox
-          Left = 20
-          Top = 90
-          Width = 300
-          Height = 19
-          Caption = 'Iniciar Coleta Autom'#225'tica ao abrir o integrador'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 1
-        end
-        object chkAutoAtualizar: TCheckBox
-          Left = 330
-          Top = 90
-          Width = 260
-          Height = 19
-          Caption = 'Atualizar o sistema automaticamente (GitHub)'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 2
-        end
-      end
-      object btnSalvarConfig: TButton
-        Left = 30
-        Top = 465
-        Width = 210
-        Height = 44
-        Caption = 'Salvar Configura'#231#245'es'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -12
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        TabOrder = 2
-        OnClick = btnSalvarConfigClick
-      end
-      object btnTestarConexaoFB: TButton
-        Left = 255
-        Top = 465
-        Width = 185
-        Height = 44
-        Caption = 'Testar Conex'#227'o'
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -12
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        TabOrder = 3
-        OnClick = btnTestarConexaoFBClick
-      end
-      object grpEmpregador: TGroupBox
-        Left = 650
-        Top = 20
-        Width = 500
-        Height = 490
-        Caption = ' Dados do Empregador (Portaria 671 / 1510 MTE) '
-        Font.Charset = DEFAULT_CHARSET
-        Font.Color = clWindowText
-        Font.Height = -12
-        Font.Name = 'Segoe UI'
-        Font.Style = [fsBold]
-        ParentFont = False
-        TabOrder = 4
-        object lblEmpTipoDoc: TLabel
-          Left = 20
-          Top = 28
-          Width = 109
-          Height = 15
-          Caption = 'Tipo de Documento:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblEmpCpfCnpj: TLabel
-          Left = 165
-          Top = 28
-          Width = 155
-          Height = 15
-          Caption = 'CNPJ / CPF do Empregador *:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblEmpRazaoSocial: TLabel
-          Left = 20
-          Top = 80
-          Width = 120
-          Height = 15
-          Caption = 'Raz'#227'o Social / Nome *:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblEmpCpfResp: TLabel
-          Left = 20
-          Top = 132
-          Width = 226
-          Height = 15
-          Caption = 'CPF do Respons'#225'vel (Obrigat'#243'rio p/ CNPJ):'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblEmpCEI: TLabel
-          Left = 260
-          Top = 132
-          Width = 103
-          Height = 15
-          Caption = 'CEI / CNO / CAEPF:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblEmpEndereco: TLabel
-          Left = 20
-          Top = 184
-          Width = 227
-          Height = 15
-          Caption = 'Endere'#231'o / Local da Presta'#231#227'o do Servi'#231'o *:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblEmpRelogioDestino: TLabel
-          Left = 20
-          Top = 236
-          Width = 114
-          Height = 15
-          Caption = 'Enviar para o Rel'#243'gio:'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-        end
-        object lblEmpInfo: TLabel
-          Left = 20
-          Top = 400
-          Width = 460
-          Height = 65
-          AutoSize = False
-          Caption = 
-            'Aten'#231#227'o: O cadastro do empregador '#233' obrigat'#243'rio no rel'#243'gio de po' +
-            'nto para liberar o cadastro de colaboradores.'#13#10'Ao alterar a empr' +
-            'esa, o rel'#243'gio grava um registro fiscal (Portaria 671) e passa a' +
-            ' emitir comprovantes com o novo CNPJ.'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clGrayText
-          Font.Height = -11
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          WordWrap = True
-        end
-        object cmbEmpTipoDoc: TComboBox
-          Left = 20
-          Top = 46
-          Width = 130
-          Height = 23
-          Style = csDropDownList
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ItemIndex = 0
-          ParentFont = False
-          TabOrder = 0
-          Text = '1 - CNPJ'
-          Items.Strings = (
-            '1 - CNPJ'
-            '2 - CPF')
-        end
-        object edtEmpCpfCnpj: TEdit
-          Left = 165
-          Top = 46
-          Width = 315
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 1
-        end
-        object edtEmpRazaoSocial: TEdit
-          Left = 20
-          Top = 98
-          Width = 460
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 2
-        end
-        object edtEmpCpfResp: TEdit
-          Left = 20
-          Top = 150
-          Width = 220
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 3
-        end
-        object edtEmpCEI: TEdit
-          Left = 260
-          Top = 150
-          Width = 220
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 4
-        end
-        object edtEmpEndereco: TEdit
-          Left = 20
-          Top = 202
-          Width = 460
-          Height = 23
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 5
-        end
-        object cmbEmpRelogioDestino: TComboBox
-          Left = 20
-          Top = 254
-          Width = 460
-          Height = 23
-          Style = csDropDownList
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = []
-          ParentFont = False
-          TabOrder = 6
-        end
-        object btnCarregarEmpBanco: TButton
-          Left = 20
-          Top = 295
-          Width = 220
-          Height = 36
-          Caption = 'Carregar do Banco'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          TabOrder = 7
-          OnClick = btnCarregarEmpBancoClick
-        end
-        object btnSalvarEmpBanco: TButton
-          Left = 260
-          Top = 295
-          Width = 220
-          Height = 36
-          Caption = 'Salvar no Banco'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          TabOrder = 8
-          OnClick = btnSalvarEmpBancoClick
-        end
-        object btnEnviarEmpRelogio: TButton
-          Left = 20
-          Top = 345
-          Width = 220
-          Height = 40
-          Caption = 'Enviar ao Rel'#243'gio'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          TabOrder = 9
-          OnClick = btnEnviarEmpRelogioClick
-        end
-        object btnLerEmpRelogio: TButton
-          Left = 260
-          Top = 345
-          Width = 220
-          Height = 40
-          Caption = 'Ler do Rel'#243'gio'
-          Font.Charset = DEFAULT_CHARSET
-          Font.Color = clWindowText
-          Font.Height = -12
-          Font.Name = 'Segoe UI'
-          Font.Style = [fsBold]
-          ParentFont = False
-          TabOrder = 10
-          OnClick = btnLerEmpRelogioClick
-        end
-      end
-    end
-    object tabCfgVersoes: TTabSheet
+        object tabCfgVersoes: TTabSheet
           Caption = '  Controle de Vers'#227'o  '
           ImageIndex = 1
           object pnlVersaoHeader: TPanel
@@ -2039,10 +2037,13 @@ object frmMain: TfrmMain
             Color = 16382457
             ParentBackground = False
             TabOrder = 0
+            DesignSize = (
+              1084
+              46)
             object lblVersaoTitulo: TLabel
               Left = 16
               Top = 11
-              Width = 148
+              Width = 144
               Height = 21
               Caption = 'Controle de Vers'#227'o'
               Font.Charset = DEFAULT_CHARSET
@@ -2085,14 +2086,18 @@ object frmMain: TfrmMain
           end
           object pnlVersaoFooter: TPanel
             Left = 0
-            Top = 500
+            Top = 491
             Width = 1084
             Height = 52
             Align = alBottom
             BevelOuter = bvNone
-            Color = 16119285
+            Color = clWhitesmoke
             ParentBackground = False
             TabOrder = 1
+            ExplicitTop = 500
+            DesignSize = (
+              1084
+              52)
             object btnVersaoAtualizar: TButton
               Left = 16
               Top = 8
@@ -2129,10 +2134,17 @@ object frmMain: TfrmMain
             Left = 0
             Top = 46
             Width = 1084
-            Height = 454
+            Height = 445
             Align = alClient
             BevelOuter = bvNone
             TabOrder = 2
+            ExplicitHeight = 454
+            object splVersao: TSplitter
+              Left = 540
+              Top = 0
+              Width = 6
+              Height = 454
+            end
             object pnlVersaoEsq: TPanel
               Left = 0
               Top = 0
@@ -2229,7 +2241,7 @@ object frmMain: TfrmMain
                     Left = 8
                     Top = 4
                     Width = 54
-                    Height = 15
+                    Height = 13
                     Caption = '5 registros'
                     Font.Charset = DEFAULT_CHARSET
                     Font.Color = clGrayText
@@ -2260,12 +2272,6 @@ object frmMain: TfrmMain
                 end
               end
             end
-            object splVersao: TSplitter
-              Left = 540
-              Top = 0
-              Width = 6
-              Height = 454
-            end
             object pnlVersaoDir: TPanel
               Left = 546
               Top = 0
@@ -2274,6 +2280,22 @@ object frmMain: TfrmMain
               Align = alClient
               BevelOuter = bvNone
               TabOrder = 1
+              object splScriptProg: TSplitter
+                Left = 0
+                Top = 220
+                Width = 538
+                Height = 5
+                Cursor = crVSplit
+                Align = alTop
+              end
+              object splProgErros: TSplitter
+                Left = 0
+                Top = 345
+                Width = 538
+                Height = 5
+                Cursor = crVSplit
+                Align = alTop
+              end
               object grpScript: TGroupBox
                 Left = 0
                 Top = 0
@@ -2306,14 +2328,6 @@ object frmMain: TfrmMain
                   WordWrap = False
                 end
               end
-              object splScriptProg: TSplitter
-                Left = 0
-                Top = 220
-                Width = 538
-                Height = 5
-                Cursor = crVSplit
-                Align = alTop
-              end
               object grpProgresso: TGroupBox
                 Left = 0
                 Top = 225
@@ -2345,14 +2359,6 @@ object frmMain: TfrmMain
                   TabOrder = 0
                   WordWrap = False
                 end
-              end
-              object splProgErros: TSplitter
-                Left = 0
-                Top = 345
-                Width = 538
-                Height = 5
-                Cursor = crVSplit
-                Align = alTop
               end
               object grpErros: TGroupBox
                 Left = 0
@@ -2632,6 +2638,21 @@ object frmMain: TfrmMain
           TabOrder = 10
           Text = '12:00'
         end
+        object lblHorSexSaida2: TLabel
+          Left = 200
+          Top = 277
+          Width = 150
+          Height = 15
+          Caption = 'Sa'#237'da na Sexta-feira'
+        end
+        object edtHorSexSaida2: TEdit
+          Left = 365
+          Top = 273
+          Width = 95
+          Height = 23
+          TabOrder = 13
+          TextHint = 'igual'
+        end
         object chkHorAtivo: TCheckBox
           Left = 20
           Top = 275
@@ -2797,6 +2818,7 @@ object frmMain: TfrmMain
         ColCount = 13
         FixedCols = 0
         RowCount = 2
+        DefaultDrawing = False
         Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
         TabOrder = 1
         OnDrawCell = grdEspelhoDrawCell
@@ -3089,6 +3111,7 @@ object frmMain: TfrmMain
     Top = 16
   end
   object mtVersoes: TFDMemTable
+    AfterScroll = mtVersoesAfterScroll
     FetchOptions.AssignedValues = [evMode]
     FetchOptions.Mode = fmAll
     ResourceOptions.AssignedValues = [rvSilentMode]
@@ -3096,7 +3119,6 @@ object frmMain: TfrmMain
     UpdateOptions.AssignedValues = [uvCheckRequired, uvAutoCommitUpdates]
     UpdateOptions.CheckRequired = False
     UpdateOptions.AutoCommitUpdates = True
-    AfterScroll = mtVersoesAfterScroll
     Left = 496
     Top = 16
   end
