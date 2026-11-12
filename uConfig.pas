@@ -53,12 +53,23 @@ type
     IntervaloVerificacaoMin: Integer;
   end;
 
+  // Integrações de relógio de ponto suportadas
+  TTipoRelogio = (trControlID, trHamsterDX);
+
+  TRelogioConfig = record
+    Tipo: TTipoRelogio;
+    NivelSeguranca: Integer;           // 1 (mais tolerante) a 9 (mais rigoroso) - Nitgen NBioBSP
+    IntervaloMinimoBatidaMin: Integer; // ignora leituras repetidas do mesmo colaborador
+    AbrirTerminalAoIniciar: Boolean;
+  end;
+
   TAppConfig = class
   private
     FIniPath: string;
     FFirebird: TFirebirdConfig;
     FControlID: TControlIDDefaultConfig;
     FAtualizacao: TAtualizacaoConfig;
+    FRelogio: TRelogioConfig;
   public
     constructor Create(const AIniPath: string = '');
     procedure Load;
@@ -67,11 +78,16 @@ type
     property Firebird: TFirebirdConfig read FFirebird write FFirebird;
     property ControlID: TControlIDDefaultConfig read FControlID write FControlID;
     property Atualizacao: TAtualizacaoConfig read FAtualizacao write FAtualizacao;
+    property Relogio: TRelogioConfig read FRelogio write FRelogio;
     property IniPath: string read FIniPath;
   end;
 
 function AppConfig: TAppConfig;
 function VersaoCompleta: string;
+function TipoRelogioParaStr(ATipo: TTipoRelogio): string;
+function StrParaTipoRelogio(const AValor: string): TTipoRelogio;
+function TipoRelogioDescricao(ATipo: TTipoRelogio): string;
+function ModoHamsterDX: Boolean;
 
 implementation
 
@@ -91,6 +107,37 @@ end;
 function VersaoCompleta: string;
 begin
   Result := Format('v%s  •  Build %d', [APP_VERSION, APP_BUILD]);
+end;
+
+function TipoRelogioParaStr(ATipo: TTipoRelogio): string;
+begin
+  case ATipo of
+    trHamsterDX: Result := 'HAMSTER_DX';
+  else
+    Result := 'CONTROLID';
+  end;
+end;
+
+function StrParaTipoRelogio(const AValor: string): TTipoRelogio;
+begin
+  if SameText(Trim(AValor), 'HAMSTER_DX') then
+    Result := trHamsterDX
+  else
+    Result := trControlID;
+end;
+
+function TipoRelogioDescricao(ATipo: TTipoRelogio): string;
+begin
+  case ATipo of
+    trHamsterDX: Result := 'Leitor Biométrico Nitgen Hamster DX (USB)';
+  else
+    Result := 'Relógio de Ponto Control iD (Rede / API)';
+  end;
+end;
+
+function ModoHamsterDX: Boolean;
+begin
+  Result := AppConfig.Relogio.Tipo = trHamsterDX;
 end;
 
 { TAppConfig }
@@ -124,6 +171,11 @@ begin
 
   FAtualizacao.AutoAtualizar := True;
   FAtualizacao.IntervaloVerificacaoMin := 60;
+
+  FRelogio.Tipo := trControlID;
+  FRelogio.NivelSeguranca := 5;
+  FRelogio.IntervaloMinimoBatidaMin := 2;
+  FRelogio.AbrirTerminalAoIniciar := False;
 
   Load;
 end;
@@ -169,6 +221,15 @@ begin
     FAtualizacao.IntervaloVerificacaoMin := Ini.ReadInteger('ATUALIZACAO', 'IntervaloVerificacaoMin', FAtualizacao.IntervaloVerificacaoMin);
     if FAtualizacao.IntervaloVerificacaoMin < 5 then
       FAtualizacao.IntervaloVerificacaoMin := 5;
+
+    FRelogio.Tipo := StrParaTipoRelogio(Ini.ReadString('RELOGIO', 'Tipo', TipoRelogioParaStr(FRelogio.Tipo)));
+    FRelogio.NivelSeguranca := Ini.ReadInteger('RELOGIO', 'NivelSeguranca', FRelogio.NivelSeguranca);
+    if (FRelogio.NivelSeguranca < 1) or (FRelogio.NivelSeguranca > 9) then
+      FRelogio.NivelSeguranca := 5;
+    FRelogio.IntervaloMinimoBatidaMin := Ini.ReadInteger('RELOGIO', 'IntervaloMinimoBatidaMin', FRelogio.IntervaloMinimoBatidaMin);
+    if FRelogio.IntervaloMinimoBatidaMin < 0 then
+      FRelogio.IntervaloMinimoBatidaMin := 0;
+    FRelogio.AbrirTerminalAoIniciar := SameText(Ini.ReadString('RELOGIO', 'AbrirTerminalAoIniciar', 'N'), 'S');
   finally
     Ini.Free;
   end;
@@ -215,6 +276,14 @@ begin
     else
       Ini.WriteString('ATUALIZACAO', 'AutoAtualizar', 'N');
     Ini.WriteInteger('ATUALIZACAO', 'IntervaloVerificacaoMin', FAtualizacao.IntervaloVerificacaoMin);
+
+    Ini.WriteString('RELOGIO', 'Tipo', TipoRelogioParaStr(FRelogio.Tipo));
+    Ini.WriteInteger('RELOGIO', 'NivelSeguranca', FRelogio.NivelSeguranca);
+    Ini.WriteInteger('RELOGIO', 'IntervaloMinimoBatidaMin', FRelogio.IntervaloMinimoBatidaMin);
+    if FRelogio.AbrirTerminalAoIniciar then
+      Ini.WriteString('RELOGIO', 'AbrirTerminalAoIniciar', 'S')
+    else
+      Ini.WriteString('RELOGIO', 'AbrirTerminalAoIniciar', 'N');
   finally
     Ini.Free;
   end;
