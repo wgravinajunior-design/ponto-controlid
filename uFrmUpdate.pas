@@ -166,7 +166,7 @@ begin
     if Lista is TJSONArray then
       for Item in Lista as TJSONArray do
         if not Item.GetValue<Boolean>('draft', False) and not Item.GetValue<Boolean>('prerelease', False)
-          and TRegEx.IsMatch(Item.GetValue<string>('tag_name', ''), '^[vV]d+(.d+)*$') then
+          and TRegEx.IsMatch(Item.GetValue<string>('tag_name', ''), '^[vV]\d+(\.\d+)*$') then
         begin
           Result := Item.ToJSON;
           AStatus := 200;
