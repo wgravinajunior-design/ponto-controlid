@@ -99,32 +99,186 @@ class _EspelhoPageState extends State<EspelhoPage> {
     }
   }
 
+  /// Corrigir: abre a tela do dia selecionado (também aberta com duplo clique na linha).
   Future<void> _corrigirBatida() async {
     if (_pessoaId <= 0) return mensagem(context, 'Selecione primeiro o colaborador no Espelho de Ponto.');
-    final v = await inputQuery(context, 'Corrigir / Incluir Batida - $_nomeColab', [
+    final d = _sel;
+    if (d == null) return mensagem(context, 'Selecione o dia na grade (ou dê duplo clique nele) para corrigir as batidas.');
+    await _telaDia(d);
+  }
+
+  /// Tela de alteração do dia: lista as batidas, permite corrigir, desconsiderar/restaurar e incluir.
+  Future<void> _telaDia(DiaEspelho dia) async {
+    if (_pessoaId <= 0) return;
+    var alterou = false;
+    await showDialog<void>(
+      context: context,
+      builder: (c) => StatefulBuilder(builder: (c, set) {
+        return AlertDialog(
+          title: Text('${fmtData(dia.data)} (${dia.diaSemana}) - $_nomeColab'),
+          content: SizedBox(
+            width: 560,
+            child: FutureBuilder<List<DbRow>>(
+              key: ValueKey(DateTime.now().microsecondsSinceEpoch),
+              future: Db.instance.getMarcacoes(dia.data, dia.data, pessoaId: _pessoaId, incluirDesconsideradas: true),
+              builder: (c, snap) {
+                if (!snap.hasData) return const SizedBox(height: 80, child: Center(child: CircularProgressIndicator()));
+                final itens = snap.data!.reversed.toList();
+                if (itens.isEmpty) return const Text('Nenhuma batida neste dia. Use "Incluir batida".');
+                return Column(mainAxisSize: MainAxisSize.min, children: [
+                  for (final m in itens)
+                    Builder(builder: (_) {
+                      final desc = asStr(m['PMA_DESCONSIDERADA']) == 'S';
+                      final dh = asDate(m['PMA_DATA_HORA']);
+                      return ListTile(
+                        dense: true,
+                        title: Text('${fmtHoraSeg(dh)}  (${asStr(m['PMA_TIPO_BATIDA']).trim().isEmpty ? '-' : asStr(m['PMA_TIPO_BATIDA'])})'
+                            '${desc ? '  - desconsiderada' : ''}',
+                            style: TextStyle(decoration: desc ? TextDecoration.lineThrough : null)),
+                        subtitle: Text(desc ? asStr(m['PMA_MOTIVO_DESCONSIDERACAO']) : asStr(m['PMA_MOTIVO_AJUSTE'])),
+                        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
+                          if (!desc)
+                            IconButton(
+                              tooltip: 'Corrigir',
+                              icon: const Icon(Icons.edit),
+                              onPressed: () async {
+                                if (await _corrigirExistente(m)) set(() => alterou = true);
+                              },
+                            ),
+                          IconButton(
+                            tooltip: desc ? 'Restaurar' : 'Desconsiderar',
+                            icon: Icon(desc ? Icons.restore : Icons.block),
+                            onPressed: () async {
+                              if (await _alternarDesconsiderada(m, desc)) set(() => alterou = true);
+                            },
+                          ),
+                        ]),
+                      );
+                    }),
+                ]);
+              },
+            ),
+          ),
+          actions: [
+            TextButton.icon(
+              icon: const Icon(Icons.add_alarm),
+              label: const Text('Incluir batida'),
+              onPressed: () async {
+                if (await _incluirBatida(dia.data)) set(() => alterou = true);
+              },
+            ),
+            FilledButton(onPressed: () => Navigator.pop(c), child: const Text('Fechar')),
+          ],
+        );
+      }),
+    );
+    if (alterou && mounted) await _calcular();
+  }
+
+  Future<bool> _corrigirExistente(DbRow m) async {
+    final id = asInt(m['PMA_ID']);
+    final dh = asDate(m['PMA_DATA_HORA']);
+    var tipo = asStr(m['PMA_TIPO_BATIDA']).trim().toUpperCase();
+    if (tipo != 'E' && tipo != 'S') tipo = 'E';
+    final v = await inputQuery(context, 'Corrigir batida #$id - $_nomeColab', [
+      'Data da Batida (DD/MM/AAAA):',
+      'Hora da Batida (HH:MM:SS):',
+      'Tipo de Batida (E = Entrada, S = Saída):',
+      'Motivo da Correção (Portaria 671 MTE):'
+    ], [
+      fmtData(dh),
+      fmtHoraSeg(dh),
+      tipo,
+      'Esquecimento de registro'
+    ]);
+    if (v == null || !mounted) return false;
+    final d = parseData(v[0]), h = parseHora(v[1]), t = v[2].trim().toUpperCase();
+    if (d == null || h == null) {
+      await mensagem(context, 'Data ou hora inválida.');
+      return false;
+    }
+    if (t != 'E' && t != 'S') {
+      await mensagem(context, 'Tipo de batida inválido. Informe E para Entrada ou S para Saída.');
+      return false;
+    }
+    if (v[3].trim().length < 5) {
+      await mensagem(context, 'Informe o motivo da correção (mínimo 5 caracteres).');
+      return false;
+    }
+    final novo = await Db.instance.corrigirMarcacao(id, d.add(h), t, v[3]);
+    if (novo > 0) {
+      _app.logTs('✏️ Batida #$id corrigida pela #$novo em ${fmtDataHora(d.add(h))} ($t) - $_nomeColab [Motivo: ${v[3].trim()}]');
+      _app.dadosAlterados();
+      return true;
+    }
+    if (mounted) await mensagem(context, 'Não foi possível corrigir a batida.');
+    return false;
+  }
+
+  Future<bool> _alternarDesconsiderada(DbRow m, bool desconsiderada) async {
+    final id = asInt(m['PMA_ID']);
+    if (desconsiderada) {
+      if (!await confirmar(context, 'Voltar a considerar a batida #$id?')) return false;
+      await Db.instance.restaurarMarcacao(id);
+      _app.logTs('↩️ Batida #$id voltou a ser considerada - $_nomeColab.');
+    } else {
+      final v = await inputQuery(context, 'Desconsiderar batida #$id',
+          ['Motivo (obrigatório pela Portaria 671 - a batida original fica guardada):'], ['Batida em duplicidade']);
+      if (v == null || !mounted) return false;
+      if (v[0].trim().length < 5) {
+        await mensagem(context, 'Informe o motivo com pelo menos 5 caracteres.');
+        return false;
+      }
+      if (!await Db.instance.desconsiderarMarcacao(id, v[0])) return false;
+      _app.logTs('🚫 Batida #$id desconsiderada - $_nomeColab. Motivo: ${v[0].trim()}');
+    }
+    _app.dadosAlterados();
+    return true;
+  }
+
+  /// Incluir: nova batida manual; a data sugerida é a do dia selecionado (ou a de hoje).
+  Future<bool> _incluirBatida([DateTime? dia]) async {
+    if (_pessoaId <= 0) {
+      await mensagem(context, 'Selecione primeiro o colaborador no Espelho de Ponto.');
+      return false;
+    }
+    final v = await inputQuery(context, 'Incluir Batida - $_nomeColab', [
       'Data da Batida (DD/MM/AAAA):',
       'Hora da Batida (HH:MM:SS):',
       'Tipo de Batida (E = Entrada, S = Saída):',
       'Motivo da Inclusão/Correção (Portaria 671):'
     ], [
-      fmtData(_sel?.data ?? _ini),
+      fmtData(dia ?? _sel?.data ?? DateTime.now()),
       '08:00:00',
       'E',
       'Esquecimento de registro'
     ]);
-    if (v == null || !mounted) return;
+    if (v == null || !mounted) return false;
     final d = parseData(v[0]), h = parseHora(v[1]), t = v[2].trim().toUpperCase();
-    if (d == null) return mensagem(context, 'Data informada é inválida.');
-    if (h == null) return mensagem(context, 'Hora informada é inválida.');
-    if (t != 'E' && t != 'S') return mensagem(context, 'Tipo de batida inválido. Informe E para Entrada ou S para Saída.');
+    if (d == null) {
+      await mensagem(context, 'Data informada é inválida.');
+      return false;
+    }
+    if (h == null) {
+      await mensagem(context, 'Hora informada é inválida.');
+      return false;
+    }
+    if (t != 'E' && t != 'S') {
+      await mensagem(context, 'Tipo de batida inválido. Informe E para Entrada ou S para Saída.');
+      return false;
+    }
     final id = await Db.instance.inserirMarcacaoManual(_pessoaId, 0, d.add(h), t, v[3]);
     if (id > 0) {
-      _app.logTs('✏️ Batida inserida/corrigida no espelho ID $id para ${fmtDataHora(d.add(h))} ($t) - $_nomeColab');
+      _app.logTs('➕ Batida incluída no espelho ID $id para ${fmtDataHora(d.add(h))} ($t) - $_nomeColab');
       _app.dadosAlterados();
-      await _calcular();
-    } else if (mounted) {
-      await mensagem(context, 'Erro ao registrar batida no banco de dados.');
+      return true;
     }
+    if (mounted) await mensagem(context, 'Erro ao registrar batida no banco de dados.');
+    return false;
+  }
+
+  Future<void> _incluirEApurar() async {
+    if (await _incluirBatida() && mounted) await _calcular();
   }
 
   Future<void> _exportarHtml() async {
@@ -165,7 +319,9 @@ class _EspelhoPageState extends State<EspelhoPage> {
 
   Color? _corLinha(DiaEspelho d) {
     if (_futuro(d)) return null;
-    if (d.tipoDia == TipoDia.feriado) return Colors.blue.withValues(alpha: .08);
+    if (d.tipoDia == TipoDia.feriado) {
+      return d.dsrDescontado ? Colors.red.withValues(alpha: .08) : Colors.blue.withValues(alpha: .08);
+    }
     if (d.tipoDia == TipoDia.domingoDsr || d.tipoDia == TipoDia.sabadoCompensado || d.tipoDia == TipoDia.folga) {
       return d.dsrDescontado ? Colors.red.withValues(alpha: .08) : Colors.grey.withValues(alpha: .15);
     }
@@ -204,17 +360,19 @@ class _EspelhoPageState extends State<EspelhoPage> {
           setState(() => _fim = d);
           _calcular(silencioso: true);
         }),
-        Btn('Apurar Ponto', Icons.calculate, _calcular),
+        Btn('Recalcular', Icons.calculate, _calcular),
       ]),
       Wrap(spacing: 8, runSpacing: 8, children: [
         Btn('Lançar Justificativa', Icons.note_add, _justificativa, tonal: true),
-        Btn('Corrigir / Incluir Batida', Icons.edit_calendar, _corrigirBatida, tonal: true),
+        Btn('Corrigir', Icons.edit, _corrigirBatida, tonal: true),
+        Btn('Incluir', Icons.add_alarm, _incluirEApurar, tonal: true),
         Btn('Imprimir / Exportar HTML', Icons.print, _exportarHtml, cor: AppCores.roxo),
       ]),
       const SizedBox(height: 8),
       if (r != null) ...[
         Text('Jornada: ${r.jornadaDescricao}   •   Dias úteis: ${r.totalDiasUteis}   •   Dias trabalhados: '
             '${r.totalDiasTrabalhados}   •   Faltas: ${r.totalFaltas}   •   DSR descontados: ${r.dsrDescontados}'
+            '   •   Feriados: ${r.totalFeriados} (descontados: ${r.feriadosDescontados})'
             '${r.diasExtraAcima2h > 0 ? '   •   Dias com extra acima de 2h: ${r.diasExtraAcima2h}' : ''}'),
         Row(children: [
           _resumo('Previsto', minutosParaHora(r.totalPrevistoMin)),
@@ -238,6 +396,10 @@ class _EspelhoPageState extends State<EspelhoPage> {
           itens: _espelho?.dias ?? const [],
           selecionado: _sel,
           onSelect: (d) => setState(() => _sel = d),
+          onDoubleTap: (d) {
+            setState(() => _sel = d);
+            if (!_futuro(d)) _telaDia(d);
+          },
           corLinha: _corLinha,
           colunas: [
             GridCol('Data', 85, (d) => fmtData(d.data)),

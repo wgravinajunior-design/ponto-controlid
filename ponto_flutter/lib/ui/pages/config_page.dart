@@ -249,6 +249,13 @@ class _ConfigPageState extends State<ConfigPage> {
           ]),
           const SizedBox(height: 8),
           const Text(
+              'USO EM REDE: no computador servidor (onde está a base) deixe Servidor = localhost; nos demais computadores '
+              'informe o IP ou nome do servidor (ex.: 192.168.0.10), a mesma porta do Firebird (padrão 3050, libere no firewall) '
+              'e o caminho do arquivo como o SERVIDOR enxerga (ex.: D:\\Dados\\PONTO.FDB), nunca \\\\PC\\pasta. '
+              'Em rede a base não é criada automaticamente. ',
+              style: TextStyle(fontSize: 12, color: Color(0xFFB45309), fontWeight: FontWeight.w600)),
+          const SizedBox(height: 6),
+          const Text(
               'Base exclusiva do ponto. Se o arquivo não existir, ele é criado automaticamente no servidor Firebird 5 '
               r'com todas as tabelas. Use o fbclient.dll de 64 bits (ex.: C:\Program Files\Firebird\Firebird_5_0\fbclient.dll).',
               style: TextStyle(fontSize: 12, color: Color(0xFF64748B))),

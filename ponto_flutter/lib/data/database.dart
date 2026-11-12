@@ -106,7 +106,9 @@ class Db {
       return await abrirFirebird(arquivo);
     } catch (erroAbrir) {
       final msg = '$erroAbrir'.toLowerCase();
-      if (!(msg.contains('i/o error') || msg.contains('no such file') || msg.contains('cannot find') ||
+      // Em rede (servidor remoto) nunca cria base automaticamente: caminho errado criaria uma base vazia.
+      if (!_servidorLocal(cfg.server)) rethrow;
+      if (!(msg.contains('i/o error')|| msg.contains('no such file') || msg.contains('cannot find') ||
           msg.contains('não pode encontrar') || msg.contains('nao pode encontrar') || msg.contains('-createfile'))) {
         rethrow;
       }
@@ -131,9 +133,37 @@ class Db {
       return true;
     } catch (e) {
       _db = null;
-      lastError = 'Falha ao conectar no banco de dados ($nomeBanco): $e';
+      lastError = 'Não foi possível conectar ao banco de dados ($nomeBanco):\n\n${_erroBancoAmigavel('$e')}';
       return false;
     }
+  }
+
+  static bool _servidorLocal(String s) {
+    final h = s.trim().toLowerCase();
+    return h.isEmpty || h == 'localhost' || h == '127.0.0.1' || h == '::1';
+  }
+
+  /// Traduz erros comuns do Firebird com a orientação para uso em rede.
+  String _erroBancoAmigavel(String raw) {
+    final cfg = AppConfig.instance.firebird;
+    final m = raw.toLowerCase();
+    final srv = cfg.server.trim().isEmpty ? '(vazio)' : cfg.server.trim();
+    if (m.contains('user name and password are not defined') || m.contains('login')) {
+      return 'Usuário/senha não reconhecidos pelo servidor Firebird "$srv".\n'
+          '${_servidorLocal(cfg.server) ? 'O Servidor está como "$srv", ou seja, este computador. Se a base fica em outra máquina, '
+              'informe em Configurações o IP ou nome do computador servidor (ex.: 192.168.0.10). ' : ''}'
+          'Confira também usuário e senha do Firebird do servidor.\n\n$raw';
+    }
+    if (m.contains('unable to complete network request') || m.contains('connection refused') ||
+        m.contains('network') || m.contains('rede') || m.contains('10061') || m.contains('10060')) {
+      return 'Servidor Firebird "$srv:${cfg.port}" inacessível. Verifique: servidor ligado e Firebird em execução; '
+          'IP/nome e porta corretos; porta ${cfg.port} liberada no firewall do servidor.\n\n$raw';
+    }
+    if (m.contains('i/o error') || m.contains('cannot find') || m.contains('no such file') || m.contains('-createfile')) {
+      return 'Arquivo da base não encontrado NO SERVIDOR: "${cfg.database}". Em rede, informe o caminho como o '
+          'computador servidor enxerga (ex.: D:\\Dados\\PONTO.FDB), não um caminho de rede (\\\\PC\\pasta).\n\n$raw';
+    }
+    return raw;
   }
 
   Future<void> desconectar() async {

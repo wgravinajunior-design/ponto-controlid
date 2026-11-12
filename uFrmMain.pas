@@ -8,7 +8,7 @@ uses
   Vcl.Graphics, Vcl.Controls, Vcl.Forms, Vcl.Dialogs, Vcl.ExtCtrls, Vcl.StdCtrls, Vcl.ComCtrls, Vcl.Grids,
   Vcl.DBGrids, Vcl.Clipbrd, Vcl.Imaging.pngimage, Vcl.Imaging.jpeg, Data.DB, FireDAC.Comp.Client, FireDAC.Stan.Param,
   uConfig, uControlIDClient, uDataModule, uPontoService, uPontoCalculoService, uSkiaButtons,
-  uFrmUpdate, uBiometriaHamster, uFrmTerminalPonto, uRelatorioPonto,
+  uFrmUpdate, uBiometriaHamster, uFrmTerminalPonto, uRelatorioPonto, uRegiao,
   FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Error, FireDAC.DatS,
   FireDAC.Phys.Intf, FireDAC.DApt.Intf, FireDAC.Comp.DataSet;
 
@@ -270,6 +270,8 @@ type
     btnLancarJustificativa: TButton;
     btnExportarEspelhoHTML: TButton;
     btnCorrigirBatidaEspelho: TButton;
+    btnIncluirBatidaEspelho: TButton;
+    btnSaldoAnterior: TButton;
     grdEspelho: TStringGrid;
     pnlEspelhoResumo: TPanel;
     pnlCardEsp1: TPanel;
@@ -364,6 +366,19 @@ type
     procedure btnCalcularEspelhoClick(Sender: TObject);
     procedure btnLancarJustificativaClick(Sender: TObject);
     procedure btnCorrigirBatidaEspelhoClick(Sender: TObject);
+    procedure btnIncluirBatidaEspelhoClick(Sender: TObject);
+    procedure btnSaldoAnteriorClick(Sender: TObject);
+    procedure btnAfastamentosClick(Sender: TObject);
+    procedure btnFeriadosClick(Sender: TObject);
+    procedure btnResumoGeralClick(Sender: TObject);
+    procedure btnMesAnteriorClick(Sender: TObject);
+    procedure btnMesSeguinteClick(Sender: TObject);
+    procedure NavegarMesEspelho(ADelta: Integer);
+    procedure HorEscalaChange(Sender: TObject);
+    procedure HorModelosClick(Sender: TObject);
+    procedure chkVerDesconsideradasClick(Sender: TObject);
+    procedure grdEspelhoDblClick(Sender: TObject);
+    procedure grdEspelhoKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
     procedure btnExportarEspelhoHTMLClick(Sender: TObject);
     procedure grdEspelhoDrawCell(Sender: TObject; ACol, ARow: Longint; Rect: TRect; State: TGridDrawState);
 
@@ -398,6 +413,16 @@ type
     FSelectedColabId: Integer;
     FSelectedHorarioId: Integer;
     FUltimoEspelho: TEspelhoPonto;
+    FLblEspelhoDetalhe: TLabel;
+    chkVerDesconsideradas: TCheckBox;
+    FPnlHorDias: TPanel;                          // grade semanal do cadastro de jornada
+    FPnlHorRegras: TPanel;                        // regras: escala, intervalo, virada do dia, banco de horas
+    FCmbEscala: TComboBox;
+    FEdtEscalaInicio, FEdtCicloTrab, FEdtCicloFolga, FEdtIntervalo, FEdtVirada: TEdit;
+    FChkBanco: TCheckBox;
+    FBtnAfastamentos, FBtnFeriados, FBtnResumoGeral, FBtnMesAnt, FBtnMesProx: TButton;
+    FHorEdt: array[1..7, 0..3] of TEdit;          // dia (1 = segunda) x (entrada, saída almoço, volta, saída)
+    FHorCargaLbl: array[1..7] of TLabel;
     FPreviousTab: TTabSheet;
     FLatestUpdateInfo: TUpdateInfo;
     FTmrChecarAtualizacao: TTimer;
@@ -474,6 +499,30 @@ type
     procedure LimparFormRelogio;
     procedure PreencherFormRelogio(AQry: TFDQuery);
     function ObterRelogioAtivoId: Integer;
+    function ValidarEntradaBatida(const AData, AHora, ATipo: string; out ADataHora: TDateTime;
+      out ATipoOk: string): Boolean;
+    procedure ApurarEspelho(ASilencioso: Boolean);
+    procedure AjustarColunasEspelho;
+    procedure ConstruirGradeHorario;
+    function NovoQuadroLista(const ATitulo, ASub: string; ACor: TColor; const ACols: array of string;
+      const ALargs: array of Integer; out ALst: TListView): TForm;
+    procedure AtualizarCargaDiaHorario(D: Integer);
+    procedure HorDiaChange(Sender: TObject);
+    procedure HorDiaExit(Sender: TObject);
+    procedure HorCopiarSegundaClick(Sender: TObject);
+    procedure DefinirDiaHorario(D: Integer; const E1, S1, E2, S2: string);
+    procedure LimparDiaHorario(D: Integer);
+    function SalvarJornadaDoForm(out ANovoId: Integer; out ADesc, AE1, AS1, AE2, AS2: string): Boolean;
+    procedure EspelhoFiltroChange(Sender: TObject);
+    function PessoaEspelhoId: Integer;
+    function DiaEspelhoSelecionado(out ADia: TDateTime): Boolean;
+    function IncluirBatidaEspelho(ADia: TDateTime): Boolean;
+    function CorrigirBatidaExistente(AId: Integer; ADataHora: TDateTime; const ATipo: string): Boolean;
+    procedure AbrirTelaDiaEspelho(ADia: TDateTime);
+    function DialogoCampos(const ATitulo, ASubtitulo: string; const APrompts: array of string;
+      var AValores: array of string; ACor: TColor = $00633A1E): Boolean;
+    procedure LvDiaCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState;
+      var DefaultDraw: Boolean);
     procedure LimparFormColaborador;
     procedure PreencherFormColaborador(AQry: TDataSet);
     procedure CarregarRelogiosNoComboDestino;
@@ -529,6 +578,9 @@ type
     skCalcularEspelho: TSkModernButton;
     skLancarJustificativa: TSkModernButton;
     skCorrigirBatidaEspelho: TSkModernButton;
+    skIncluirBatidaEspelho: TSkModernButton;
+    skSaldoAnterior: TSkModernButton;
+    skAfastamentos, skFeriados, skResumoGeral, skMesAnt, skMesProx: TSkModernButton;
     skExportarEspelhoHTML: TSkModernButton;
     skIrParaVersoes: TSkModernButton;
     skVersaoAtualizar: TSkModernButton;
@@ -541,6 +593,45 @@ var
 implementation
 
 {$R *.dfm}
+
+function SeTexto(ACond: Boolean; const ASim, ANao: string): string;
+begin
+  if ACond then
+    Result := ASim
+  else
+    Result := ANao;
+end;
+
+// Horas com sinal em HH:MM ("+12:30", "-05:15", "8:00") -> minutos
+function ParseSaldoHoras(const S: string; out AMin: Integer): Boolean;
+var
+  T: string;
+  Neg: Boolean;
+  P, H, M: Integer;
+begin
+  Result := False;
+  AMin := 0;
+  T := Trim(S);
+  if T = '' then
+    Exit;
+  Neg := False;
+  if (T[1] = '+') or (T[1] = '-') then
+  begin
+    Neg := T[1] = '-';
+    T := Trim(Copy(T, 2, MaxInt));
+  end;
+  P := Pos(':', T);
+  if P < 2 then
+    Exit;
+  if (not TryStrToInt(Copy(T, 1, P - 1), H)) or (not TryStrToInt(Copy(T, P + 1, 2), M)) then
+    Exit;
+  if (H < 0) or (M < 0) or (M > 59) then
+    Exit;
+  AMin := H * 60 + M;
+  if Neg then
+    AMin := -AMin;
+  Result := True;
+end;
 
 procedure TfrmMain.FormCreate(Sender: TObject);
 begin
@@ -596,12 +687,24 @@ begin
   FSelectedColabId := 0;
   FSelectedHorarioId := 0;
   FUltimoEspelho := nil;
+  TPontoCalculoService.LogErro := procedure(AMsg: string)
+    begin
+      LogMessage('⚠️ ' + AMsg, True);
+    end;
+  FLblEspelhoDetalhe := nil;
+  chkVerDesconsideradas := nil;
 
   dtpIni.Date := StartOfTheMonth(Date);
   dtpFim.Date := Date;
 
   dtpEspelhoIni.Date := StartOfTheMonth(Date);
   dtpEspelhoFim.Date := EndOfTheMonth(Date);
+  // Seletores de data no padrão dd/mm/aaaa (calendário em português)
+  PadronizarSeletoresDeData(Self);
+  // Trocar colaborador ou período refaz a apuração sozinho
+  cmbEspelhoColab.OnChange := EspelhoFiltroChange;
+  dtpEspelhoIni.OnChange := EspelhoFiltroChange;
+  dtpEspelhoFim.OnChange := EspelhoFiltroChange;
 
   // Inicializar cabeçalhos e larguras do grid de Espelho de Ponto
   grdEspelho.Cells[0, 0] := 'Data';
@@ -614,10 +717,16 @@ begin
   grdEspelho.Cells[7, 0] := 'Carga Prevista';
   grdEspelho.Cells[8, 0] := 'Horas Realizadas';
   grdEspelho.Cells[9, 0] := 'Horas Extras';
-  grdEspelho.Cells[10, 0] := 'Faltas e Atrasos';
-  grdEspelho.Cells[11, 0] := 'Saldo Diário';
-  grdEspelho.Cells[12, 0] := 'Ocorrência / Justificativa Legal';
+  grdEspelho.Cells[10, 0] := 'Noturno';
+  grdEspelho.Cells[11, 0] := 'Interv. Suprimido';
+  grdEspelho.Cells[12, 0] := 'Faltas e Atrasos';
+  grdEspelho.Cells[13, 0] := 'Saldo Diário';
+  grdEspelho.Cells[14, 0] := 'Ocorrência / Justificativa Legal';
 
+  grdEspelho.Font.Name := 'Segoe UI';
+  grdEspelho.Font.Size := 9;
+  grdEspelho.DefaultRowHeight := 27;
+  grdEspelho.RowHeights[0] := 34;
   grdEspelho.ColWidths[0] := 85;
   grdEspelho.ColWidths[1] := 105;
   grdEspelho.ColWidths[2] := 85;
@@ -628,13 +737,16 @@ begin
   grdEspelho.ColWidths[7] := 95;
   grdEspelho.ColWidths[8] := 115;
   grdEspelho.ColWidths[9] := 95;
-  grdEspelho.ColWidths[10] := 110;
-  grdEspelho.ColWidths[11] := 95;
-  grdEspelho.ColWidths[12] := 450;
+  grdEspelho.ColWidths[10] := 80;
+  grdEspelho.ColWidths[11] := 110;
+  grdEspelho.ColWidths[12] := 110;
+  grdEspelho.ColWidths[13] := 95;
+  grdEspelho.ColWidths[14] := 450;
 
   CriarBotoesSkia;
   CriarControlesIntegracao;
   LimparFormColaborador;
+  ConstruirGradeHorario;
   LimparFormHorario;
   ConfigurarGridRelogios;
   ConfigurarGridColaboradores;
@@ -921,13 +1033,24 @@ begin
     RelId := Integer(NativeInt(cmbFiltroRelogio.Items.Objects[cmbFiltroRelogio.ItemIndex]));
 
   OldDs := FdsMarcacoes.DataSet;
-  Qry := dmDados.GetMarcacoes(dtpIni.Date, dtpFim.Date, RelId, 0);
+  Qry := dmDados.GetMarcacoes(dtpIni.Date, dtpFim.Date, RelId, 0,
+    not (Assigned(chkVerDesconsideradas) and chkVerDesconsideradas.Checked));
   FdsMarcacoes.DataSet := Qry;
   if Assigned(OldDs) then
     OldDs.Free;
 
   ConfigurarGridMarcacoes;
   lblTotalMarcacoesGrid.Caption := Format('Total: %d marcações', [Qry.RecordCount]);
+
+  // Batida nova (coleta, importação, ajuste): refaz o espelho se ele está na tela. Em outra aba não custa
+  // nada agora: ao abrir a aba do Espelho a apuração é refeita (pgcMainChange).
+  if Assigned(FUltimoEspelho) and (pgcMain.ActivePage = tabEspelho) then
+    ApurarEspelho(True);
+end;
+
+procedure TfrmMain.chkVerDesconsideradasClick(Sender: TObject);
+begin
+  CarregarMarcacoes;
 end;
 
 procedure TfrmMain.LimparFormRelogio;
@@ -1943,10 +2066,11 @@ procedure TfrmMain.btnExcluirMarcacaoClick(Sender: TObject);
 var
   MarcId: Integer;
   Colab, DataHoraStr: string;
+  Valores: array of string;
 begin
   if (not Assigned(FdsMarcacoes.DataSet)) or FdsMarcacoes.DataSet.IsEmpty then
   begin
-    ShowMessage('Selecione uma marcação na grade para excluir.');
+    ShowMessage('Selecione uma marcação na grade para desconsiderar ou restaurar.');
     Exit;
   end;
 
@@ -1954,30 +2078,78 @@ begin
   Colab := FdsMarcacoes.DataSet.FieldByName('PESSOA_NOME').AsString;
   DataHoraStr := FormatDateTime('dd/mm/yyyy hh:nn:ss', FdsMarcacoes.DataSet.FieldByName('PMA_DATA_HORA').AsDateTime);
 
-  if MessageDlg(Format('Deseja realmente excluir a marcação selecionada do banco de dados?'#13#10#13#10 +
-                       'Colaborador: %s'#13#10 +
-                       'Data e Hora: %s'#13#10 +
-                       'ID Registro: %d', [Colab, DataHoraStr, MarcId]),
-                mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+  // Portaria 671: a batida nunca é apagada. Ela fica desconsiderada, com o motivo, e pode ser restaurada.
+  if FdsMarcacoes.DataSet.FieldByName('PMA_DESCONSIDERADA').AsString = 'S' then
+  begin
+    if MessageDlg(Format('Voltar a considerar a batida #%d de %s (%s)?', [MarcId, Colab, DataHoraStr]),
+         mtConfirmation, [mbYes, mbNo], 0) <> mrYes then
+      Exit;
+    if dmDados.RestaurarMarcacao(MarcId) then
+    begin
+      LogMessage(Format('↩️ Batida #%d (%s - %s) voltou a ser considerada.', [MarcId, Colab, DataHoraStr]));
+      CarregarMarcacoes;
+      AtualizarDashboard;
+    end
+    else
+      ShowMessage('Não foi possível restaurar a batida selecionada.');
     Exit;
+  end;
+
+  SetLength(Valores, 1);
+  Valores[0] := 'Batida em duplicidade';
+  if not DialogoCampos('Desconsiderar batida', Format('Batida #%d  •  %s  •  %s', [MarcId, Colab, DataHoraStr]),
+       ['Motivo (obrigatório pela Portaria 671 - a batida original fica guardada):'], Valores, $003030C5) then
+    Exit;
+  if Length(Trim(Valores[0])) < 5 then
+  begin
+    ShowMessage('Informe o motivo com pelo menos 5 caracteres.');
+    Exit;
+  end;
 
   Screen.Cursor := crHourGlass;
   try
-    if dmDados.ExcluirMarcacao(MarcId) then
+    if dmDados.DesconsiderarMarcacao(MarcId, Valores[0]) then
     begin
-      LogMessage(Format('🗑️ Marcação #%d (%s - %s) excluída do banco de dados.', [MarcId, Colab, DataHoraStr]));
+      LogMessage(Format('🚫 Batida #%d (%s - %s) desconsiderada. Motivo: %s', [MarcId, Colab, DataHoraStr, Trim(Valores[0])]));
       CarregarMarcacoes;
       AtualizarDashboard;
-      ShowMessage('Marcação excluída com sucesso!');
     end
     else
     begin
-      LogMessage(Format('❌ Falha ao excluir marcação #%d: %s', [MarcId, FormatarErroAmigavel(dmDados.LastError)]), True);
-      ShowMessage('Não foi possível excluir a marcação selecionada.');
+      LogMessage(Format('❌ Falha ao desconsiderar batida #%d: %s', [MarcId, FormatarErroAmigavel(dmDados.LastError)]), True);
+      ShowMessage('Não foi possível desconsiderar a batida selecionada (a base pode não ter a estrutura da Portaria 671).');
     end;
   finally
     Screen.Cursor := crDefault;
   end;
+end;
+
+// Valida data, hora e tipo digitados nos diálogos de batida (uma só regra para todas as telas)
+function TfrmMain.ValidarEntradaBatida(const AData, AHora, ATipo: string; out ADataHora: TDateTime;
+  out ATipoOk: string): Boolean;
+var
+  D, H: TDateTime;
+begin
+  Result := False;
+  ADataHora := 0;
+  ATipoOk := UpperCase(Trim(ATipo));
+  if not TryStrToDate(Trim(AData), D) then
+  begin
+    ShowMessage('Data informada é inválida. Utilize o formato DD/MM/AAAA.');
+    Exit;
+  end;
+  if not TryStrToTime(Trim(AHora), H) then
+  begin
+    ShowMessage('Hora informada é inválida. Utilize o formato HH:MM:SS.');
+    Exit;
+  end;
+  if (ATipoOk <> 'E') and (ATipoOk <> 'S') then
+  begin
+    ShowMessage('Tipo de batida inválido. Informe E para Entrada ou S para Saída.');
+    Exit;
+  end;
+  ADataHora := Trunc(D) + Frac(H);
+  Result := True;
 end;
 
 procedure TfrmMain.btnEditarMarcacaoClick(Sender: TObject);
@@ -1986,14 +2158,20 @@ var
   DataHoraAtual: TDateTime;
   TipoAtual, NomeColab: string;
   Prompts, Values: array of string;
-  NovaDataStr, NovaHoraStr, NovoTipoStr, NovoMotivoStr: string;
-  NovaData, NovaHora, NovaDataHora: TDateTime;
+  NovoTipoStr, NovoMotivoStr: string;
+  NovaDataHora: TDateTime;
+  NovoId: Integer;
   Qry: TDataSet;
 begin
   Qry := FdsMarcacoes.DataSet;
   if (Qry = nil) or Qry.IsEmpty then
   begin
     ShowMessage('Selecione uma marcação de ponto na lista para corrigir.');
+    Exit;
+  end;
+  if Qry.FieldByName('PMA_DESCONSIDERADA').AsString = 'S' then
+  begin
+    ShowMessage('Esta batida já está desconsiderada. Inclua uma nova batida ou restaure esta.');
     Exit;
   end;
 
@@ -2018,45 +2196,32 @@ begin
   Prompts[3] := 'Motivo da Correção (Portaria 671 MTE):';
   Values[3] := 'Esquecimento de registro';
 
-  if not InputQuery(Format('Corrigir Batida de Ponto - [%s] (ID %d)', [NomeColab, PmaId]), Prompts, Values) then
+  if not DialogoCampos('Corrigir batida', Format('Batida #%d  •  %s', [PmaId, NomeColab]),
+       Prompts, Values, $000677D9) then
     Exit;
 
-  NovaDataStr := Trim(Values[0]);
-  NovaHoraStr := Trim(Values[1]);
-  NovoTipoStr := UpperCase(Trim(Values[2]));
   NovoMotivoStr := Trim(Values[3]);
-
-  if not TryStrToDate(NovaDataStr, NovaData) then
+  if not ValidarEntradaBatida(Values[0], Values[1], Values[2], NovaDataHora, NovoTipoStr) then
+    Exit;
+  if Length(NovoMotivoStr) < 5 then
   begin
-    ShowMessage('Data informada é inválida. Utilize o formato DD/MM/AAAA.');
+    ShowMessage('Informe o motivo da correção (mínimo 5 caracteres).');
     Exit;
   end;
-
-  if not TryStrToTime(NovaHoraStr, NovaHora) then
-  begin
-    ShowMessage('Hora informada é inválida. Utilize o formato HH:MM:SS.');
-    Exit;
-  end;
-
-  if (NovoTipoStr <> 'E') and (NovoTipoStr <> 'S') then
-  begin
-    ShowMessage('Tipo de batida inválido. Informe E para Entrada ou S para Saída.');
-    Exit;
-  end;
-
-  NovaDataHora := Trunc(NovaData) + Frac(NovaHora);
 
   Screen.Cursor := crHourGlass;
   try
-    if dmDados.AtualizarMarcacao(PmaId, NovaDataHora, NovoTipoStr) then
+    // Portaria 671: a original fica desconsiderada e uma nova batida é gravada com o motivo
+    NovoId := dmDados.CorrigirMarcacao(PmaId, NovaDataHora, NovoTipoStr, NovoMotivoStr);
+    if NovoId > 0 then
     begin
-      LogMessage(Format('✏️ Batida ID %d corrigida para %s (%s) - Colaborador: %s [Motivo: %s]',
-        [PmaId, FormatDateTime('dd/mm/yyyy hh:nn:ss', NovaDataHora), NovoTipoStr, NomeColab, NovoMotivoStr]));
+      LogMessage(Format('✏️ Batida #%d corrigida pela #%d em %s (%s) - Colaborador: %s [Motivo: %s]',
+        [PmaId, NovoId, FormatDateTime('dd/mm/yyyy hh:nn:ss', NovaDataHora), NovoTipoStr, NomeColab, NovoMotivoStr]));
       CarregarMarcacoes;
-      ShowMessage('Marcação de ponto corrigida com sucesso no sistema!');
+      ShowMessage('Correção registrada! A batida original foi preservada como desconsiderada (Portaria 671).');
     end
     else
-      ShowMessage('Não foi possível atualizar a marcação de ponto no banco de dados.');
+      ShowMessage('Não foi possível corrigir a marcação de ponto no banco de dados.');
   finally
     Screen.Cursor := crDefault;
   end;
@@ -2065,8 +2230,8 @@ end;
 procedure TfrmMain.btnNovaMarcacaoClick(Sender: TObject);
 var
   Prompts, Values: array of string;
-  ColabBusca, NovaDataStr, NovaHoraStr, NovoTipoStr, NovoMotivoStr: string;
-  NovaData, NovaHora, NovaDataHora: TDateTime;
+  ColabBusca, NovoTipoStr, NovoMotivoStr: string;
+  NovaDataHora: TDateTime;
   PessoaId, NovoId: Integer;
   NomeColab: string;
   Qry: TFDQuery;
@@ -2089,13 +2254,11 @@ begin
   Prompts[4] := 'Motivo da Inclusão (Portaria 671 MTE):';
   Values[4] := 'Esquecimento de registro';
 
-  if not InputQuery('Incluir Nova Batida Manual de Ponto', Prompts, Values) then
+  if not DialogoCampos('Incluir batida manual', 'Informe o colaborador, o horário e o motivo (Portaria 671)',
+       Prompts, Values, $00137333) then
     Exit;
 
   ColabBusca := Trim(Values[0]);
-  NovaDataStr := Trim(Values[1]);
-  NovaHoraStr := Trim(Values[2]);
-  NovoTipoStr := UpperCase(Trim(Values[3]));
   NovoMotivoStr := Trim(Values[4]);
 
   if ColabBusca = '' then
@@ -2103,42 +2266,31 @@ begin
     ShowMessage('Informe o CPF ou código do colaborador.');
     Exit;
   end;
-
-  if not TryStrToDate(NovaDataStr, NovaData) then
+  if not ValidarEntradaBatida(Values[1], Values[2], Values[3], NovaDataHora, NovoTipoStr) then
+    Exit;
+  if Length(NovoMotivoStr) < 5 then
   begin
-    ShowMessage('Data informada é inválida. Utilize o formato DD/MM/AAAA.');
+    ShowMessage('Informe o motivo da inclusão (mínimo 5 caracteres).');
     Exit;
   end;
 
-  if not TryStrToTime(NovaHoraStr, NovaHora) then
-  begin
-    ShowMessage('Hora informada é inválida. Utilize o formato HH:MM:SS.');
-    Exit;
-  end;
-
-  if (NovoTipoStr <> 'E') and (NovoTipoStr <> 'S') then
-  begin
-    ShowMessage('Tipo de batida inválido. Informe E para Entrada ou S para Saída.');
-    Exit;
-  end;
-
-  // Localizar Pessoa
+  // Localizar Pessoa (mesmas colunas do restante do sistema: PES_ID e PES_RSOCIAL_NOME)
   PessoaId := 0;
   NomeColab := '';
   Qry := TFDQuery.Create(nil);
   try
     Qry.Connection := dmDados.FDConnection;
     Qry.SQL.Text :=
-      'SELECT FIRST 1 PES_CODIGO, PES_NOME FROM TB_PESSOA ' +
-      'WHERE PES_CODIGO = :COD OR PES_CNPJ_CPF = :CPF OR PES_CNPJ_CPF = :DIG';
+      'SELECT FIRST 1 PES_ID, PES_RSOCIAL_NOME FROM TB_PESSOA ' +
+      'WHERE PES_ID = :COD OR PES_CNPJ_CPF = :CPF OR PES_CNPJ_CPF = :DIG';
     Qry.ParamByName('COD').AsInteger := StrToIntDef(ColabBusca, 0);
     Qry.ParamByName('CPF').AsString := ColabBusca;
     Qry.ParamByName('DIG').AsString := OnlyDigits(ColabBusca);
     Qry.Open;
     if not Qry.IsEmpty then
     begin
-      PessoaId := Qry.FieldByName('PES_CODIGO').AsInteger;
-      NomeColab := Qry.FieldByName('PES_NOME').AsString;
+      PessoaId := Qry.FieldByName('PES_ID').AsInteger;
+      NomeColab := Qry.FieldByName('PES_RSOCIAL_NOME').AsString;
     end;
   finally
     Qry.Free;
@@ -2150,11 +2302,9 @@ begin
     Exit;
   end;
 
-  NovaDataHora := Trunc(NovaData) + Frac(NovaHora);
-
   Screen.Cursor := crHourGlass;
   try
-    NovoId := dmDados.InserirMarcacaoManual(PessoaId, ObterRelogioAtivoId, NovaDataHora, NovoTipoStr);
+    NovoId := dmDados.InserirMarcacaoManual(PessoaId, ObterRelogioAtivoId, NovaDataHora, NovoTipoStr, NovoMotivoStr);
     if NovoId > 0 then
     begin
       LogMessage(Format('➕ Batida manual ID %d incluída para %s (%s) - Colaborador: %s [Motivo: %s]',
@@ -2831,8 +2981,9 @@ begin
   else if pgcMain.ActivePage = tabEspelho then
   begin
     CarregarComboColaboradoresEspelho;
-    if (grdEspelho.RowCount <= 2) and (cmbEspelhoColab.Items.Count > 0) then
-      btnCalcularEspelhoClick(nil);
+    // Sempre refaz a apuração ao abrir a aba: o espelho nunca fica com valores de antes de uma correção
+    if cmbEspelhoColab.Items.Count > 0 then
+      ApurarEspelho(True);
   end;
 end;
 
@@ -2951,27 +3102,400 @@ begin
   Col.Width := 85;
 end;
 
+// ======================= Jornada dia a dia (segunda a domingo) =======================
+
+const
+  NomesDiasHor: array[1..7] of string = ('Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo');
+
+// "8", "800", "8:0", "08:00" -> "08:00"; texto vazio continua vazio; o que não der para entender fica como está
+function NormalizaHoraTxt(const S: string): string;
+var
+  D: string;
+  I, P, H, M: Integer;
+begin
+  Result := Trim(S);
+  if Result = '' then
+    Exit;
+  P := Pos(':', Result);
+  if P > 0 then
+  begin
+    if TryStrToInt(Copy(Result, 1, P - 1), H) and TryStrToInt(Copy(Result, P + 1, 2), M) and
+       (H >= 0) and (H <= 23) and (M >= 0) and (M <= 59) then
+      Result := Format('%.2d:%.2d', [H, M]);
+    Exit;
+  end;
+  D := '';
+  for I := 1 to Length(Result) do
+    if CharInSet(Result[I], ['0'..'9']) then
+      D := D + Result[I];
+  case Length(D) of
+    1, 2: begin H := StrToInt(D); M := 0; end;
+    3: begin H := StrToInt(Copy(D, 1, 1)); M := StrToInt(Copy(D, 2, 2)); end;
+    4: begin H := StrToInt(Copy(D, 1, 2)); M := StrToInt(Copy(D, 3, 2)); end;
+  else
+    Exit;
+  end;
+  if (H <= 23) and (M <= 59) then
+    Result := Format('%.2d:%.2d', [H, M]);
+end;
+
+function HoraTxtValida(const S: string): Boolean;
+var
+  H, M: Integer;
+begin
+  Result := (Length(S) = 5) and (S[3] = ':') and TryStrToInt(Copy(S, 1, 2), H) and TryStrToInt(Copy(S, 4, 2), M) and
+    (H >= 0) and (H <= 23) and (M >= 0) and (M <= 59);
+end;
+
+// Minutos entre dois horários HH:MM (passando da meia-noite soma 24h)
+function MinutosEntreHoras(const A, B: string): Integer;
+begin
+  if (not HoraTxtValida(A)) or (not HoraTxtValida(B)) then
+    Exit(0);
+  Result := TPontoCalculoService.HoraParaMinutos(B) - TPontoCalculoService.HoraParaMinutos(A);
+  if Result < 0 then
+    Inc(Result, 1440);
+end;
+
+// Cria a grade semanal no lugar dos campos gerais do cadastro de jornada
+procedure TfrmMain.ConstruirGradeHorario;
+const
+  Titulos: array[0..4] of string = ('Dia', 'Entrada', 'Saída almoço', 'Volta almoço', 'Saída');
+var
+  D, K, X: Integer;
+  Lb: TLabel;
+  Ed: TEdit;
+  Btn: TButton;
+  Antigos: array of TControl;
+  C: TControl;
+begin
+  // campos gerais antigos: agora tudo vem da grade, dia a dia
+  Antigos := [lblHorEntrada1, lblHorSaida1, lblHorEntrada2, lblHorSaida2, edtHorEntrada1, edtHorSaida1,
+    edtHorEntrada2, edtHorSaida2, lblHorCarga, edtHorCarga, chkHorCompensaSab, chkHorTrabalhaSab,
+    lblHorSabEntrada1, lblHorSabSaida1, edtHorSabEntrada1, edtHorSabSaida1, lblHorSexSaida2, edtHorSexSaida2];
+  for C in Antigos do
+    C.Visible := False;
+
+  FPnlHorDias := TPanel.Create(Self);
+  FPnlHorDias.Parent := pnlHorarioForm;
+  FPnlHorDias.SetBounds(20, 86, 440, 208);
+  FPnlHorDias.BevelOuter := bvNone;
+  FPnlHorDias.ParentBackground := False;
+  FPnlHorDias.Color := $00F5F5F5;
+
+  // cabeçalho
+  for K := 0 to 4 do
+  begin
+    Lb := TLabel.Create(FPnlHorDias);
+    Lb.Parent := FPnlHorDias;
+    Lb.Font.Style := [fsBold];
+    Lb.Font.Size := 8;
+    Lb.Font.Color := $00555555;
+    Lb.Caption := Titulos[K];
+    if K = 0 then
+      Lb.SetBounds(0, 2, 62, 15)
+    else
+      Lb.SetBounds(64 + (K - 1) * 72, 2, 70, 15);
+  end;
+  Lb := TLabel.Create(FPnlHorDias);
+  Lb.Parent := FPnlHorDias;
+  Lb.Font.Style := [fsBold];
+  Lb.Font.Size := 8;
+  Lb.Font.Color := $00555555;
+  Lb.Caption := 'Carga';
+  Lb.SetBounds(360, 2, 70, 15);
+
+  for D := 1 to 7 do
+  begin
+    Lb := TLabel.Create(FPnlHorDias);
+    Lb.Parent := FPnlHorDias;
+    Lb.SetBounds(0, 24 + (D - 1) * 26 + 4, 62, 15);
+    Lb.Font.Style := [fsBold];
+    Lb.Caption := NomesDiasHor[D];
+    for K := 0 to 3 do
+    begin
+      X := 64 + K * 72;
+      Ed := TEdit.Create(FPnlHorDias);
+      Ed.Parent := FPnlHorDias;
+      Ed.SetBounds(X, 24 + (D - 1) * 26, 68, 23);
+      Ed.MaxLength := 5;
+      Ed.Alignment := taCenter;
+      Ed.TextHint := '--:--';
+      Ed.Tag := D * 10 + K;
+      Ed.OnChange := HorDiaChange;
+      Ed.OnExit := HorDiaExit;
+      FHorEdt[D, K] := Ed;
+    end;
+    FHorCargaLbl[D] := TLabel.Create(FPnlHorDias);
+    FHorCargaLbl[D].Parent := FPnlHorDias;
+    FHorCargaLbl[D].SetBounds(360, 24 + (D - 1) * 26 + 4, 76, 15);
+    FHorCargaLbl[D].Caption := 'Folga';
+  end;
+
+  Btn := TButton.Create(Self);
+  Btn.Parent := pnlHorarioForm;
+  Btn.SetBounds(250, 314, 210, 30);
+  Btn.Caption := 'Copiar segunda para terça a sexta';
+  Btn.OnClick := HorCopiarSegundaClick;
+
+  Lb := TLabel.Create(Self);
+  Lb.Parent := pnlHorarioForm;
+  Lb.SetBounds(250, 40, 210, 15);
+  Lb.Font.Color := $00555555;
+  Lb.Font.Style := [fsItalic];
+  Lb.Caption := 'Dia em branco = não trabalha';
+
+  Btn := TButton.Create(Self);
+  Btn.Parent := pnlHorarioForm;
+  Btn.SetBounds(250, 6, 210, 28);
+  Btn.Caption := 'Modelos: 5x2, 6x1, 12x36...';
+  Btn.OnClick := HorModelosClick;
+
+  // demais campos sobem para baixo da grade
+  lblHorTolerancia.SetBounds(20, 300, 180, 15);
+  lblHorTolerancia.Caption := 'Tolerância CLT (minutos)';
+  edtHorTolerancia.SetBounds(20, 318, 100, 23);
+  chkHorAtivo.SetBounds(135, 320, 110, 19);
+
+  // Regras da jornada: escala, intervalo, virada do dia e banco de horas
+  FPnlHorRegras := TPanel.Create(Self);
+  FPnlHorRegras.Parent := pnlHorarioForm;
+  FPnlHorRegras.SetBounds(20, 354, 440, 100);
+  FPnlHorRegras.BevelOuter := bvNone;
+  FPnlHorRegras.ParentBackground := False;
+  FPnlHorRegras.Color := $00F5F5F5;
+
+  FCmbEscala := TComboBox.Create(Self);
+  FCmbEscala.Parent := FPnlHorRegras;
+  FCmbEscala.Style := csDropDownList;
+  FCmbEscala.SetBounds(0, 16, 190, 23);
+  FCmbEscala.Items.Add('Semanal (dia a dia)');
+  FCmbEscala.Items.Add('12x36 (usa o 1º dia preenchido)');
+  FCmbEscala.Items.Add('Ciclo, ex.: 6x1 (1º dia preenchido)');
+  FCmbEscala.ItemIndex := 0;
+  FCmbEscala.OnChange := HorEscalaChange;
+
+  FEdtEscalaInicio := TEdit.Create(Self);
+  FEdtEscalaInicio.Parent := FPnlHorRegras;
+  FEdtEscalaInicio.SetBounds(200, 16, 110, 23);
+  FEdtEscalaInicio.TextHint := 'DD/MM/AAAA';
+
+  FEdtCicloTrab := TEdit.Create(Self);
+  FEdtCicloTrab.Parent := FPnlHorRegras;
+  FEdtCicloTrab.SetBounds(320, 16, 50, 23);
+  FEdtCicloTrab.Alignment := taCenter;
+  FEdtCicloFolga := TEdit.Create(Self);
+  FEdtCicloFolga.Parent := FPnlHorRegras;
+  FEdtCicloFolga.SetBounds(380, 16, 50, 23);
+  FEdtCicloFolga.Alignment := taCenter;
+
+  FEdtIntervalo := TEdit.Create(Self);
+  FEdtIntervalo.Parent := FPnlHorRegras;
+  FEdtIntervalo.SetBounds(0, 68, 110, 23);
+  FEdtIntervalo.Alignment := taCenter;
+  FEdtVirada := TEdit.Create(Self);
+  FEdtVirada.Parent := FPnlHorRegras;
+  FEdtVirada.SetBounds(200, 68, 110, 23);
+  FEdtVirada.Alignment := taCenter;
+  FEdtVirada.TextHint := '00:00';
+  FEdtVirada.OnExit := HorDiaExit;
+  FEdtVirada.Tag := 0;
+
+  FChkBanco := TCheckBox.Create(Self);
+  FChkBanco.Parent := FPnlHorRegras;
+  FChkBanco.SetBounds(320, 70, 120, 19);
+  FChkBanco.Caption := 'Banco de horas';
+
+  Lb := TLabel.Create(Self); Lb.Parent := FPnlHorRegras; Lb.SetBounds(0, 0, 190, 15); Lb.Caption := 'Tipo de escala';
+  Lb := TLabel.Create(Self); Lb.Parent := FPnlHorRegras; Lb.SetBounds(200, 0, 110, 15); Lb.Caption := '1º dia trabalhado';
+  Lb := TLabel.Create(Self); Lb.Parent := FPnlHorRegras; Lb.SetBounds(320, 0, 50, 15); Lb.Caption := 'Trabalha';
+  Lb := TLabel.Create(Self); Lb.Parent := FPnlHorRegras; Lb.SetBounds(380, 0, 50, 15); Lb.Caption := 'Folga';
+  Lb := TLabel.Create(Self); Lb.Parent := FPnlHorRegras; Lb.SetBounds(0, 52, 190, 15); Lb.Caption := 'Intervalo mínimo (minutos)';
+  Lb := TLabel.Create(Self); Lb.Parent := FPnlHorRegras; Lb.SetBounds(200, 52, 110, 15); Lb.Caption := 'Virada do dia';
+  HorEscalaChange(nil);
+
+  pnlHorarioBtns.Top := 462;
+end;
+
+procedure TfrmMain.AtualizarCargaDiaHorario(D: Integer);
+var
+  K: Integer;
+  Vazio: Boolean;
+  V: array[0..3] of string;
+  Carga: Integer;
+begin
+  if (D < 1) or (D > 7) or (FHorEdt[D, 0] = nil) or (FHorCargaLbl[D] = nil) then
+    Exit;
+  Vazio := True;
+  for K := 0 to 3 do
+  begin
+    V[K] := Trim(FHorEdt[D, K].Text);
+    if V[K] <> '' then
+      Vazio := False;
+  end;
+  if Vazio then
+  begin
+    FHorCargaLbl[D].Caption := 'Folga';
+    FHorCargaLbl[D].Font.Color := $00999999;
+    Exit;
+  end;
+  if (V[1] <> '') or (V[2] <> '') then
+    Carga := MinutosEntreHoras(V[0], V[1]) + MinutosEntreHoras(V[2], V[3])
+  else
+    Carga := MinutosEntreHoras(V[0], V[3]);
+  FHorCargaLbl[D].Caption := TPontoCalculoService.MinutosParaHora(Carga);
+  FHorCargaLbl[D].Font.Color := $00333333;
+end;
+
+// Modelos prontos de escala: preenchem a grade e as regras (depois dá para ajustar dia a dia)
+procedure TfrmMain.HorModelosClick(Sender: TObject);
+const
+  M5X2_44 = '5x2 - 44h semanais (8h48 por dia, sábado compensado)';
+  M5X2_40 = '5x2 - 40h semanais (8h por dia)';
+  M6X1_44 = '6x1 - 44h semanais (7h20 por dia)';
+  M12X36 = '12x36 - 07:00 às 19:00';
+var
+  V: array of string;
+  D: Integer;
+  Nome: string;
+begin
+  SetLength(V, 1);
+  V[0] := M5X2_44;
+  if not DialogoCampos('Modelo de escala', 'Preenche a grade e as regras; você pode ajustar depois',
+       ['Modelo|' + M5X2_44 + '|' + M5X2_40 + '|' + M6X1_44 + '|' + M12X36], V, $00633A1E) then
+    Exit;
+  Nome := V[0];
+  if Nome = M5X2_44 then
+  begin
+    // 5x2: trabalha de segunda a sexta; sábado é dia útil não trabalhado (compensado) e domingo é o DSR
+    for D := 1 to 5 do DefinirDiaHorario(D, '08:00', '12:00', '13:12', '18:00');
+    LimparDiaHorario(6); LimparDiaHorario(7);
+    FCmbEscala.ItemIndex := 0;
+  end
+  else if Nome = M5X2_40 then
+  begin
+    for D := 1 to 5 do DefinirDiaHorario(D, '08:00', '12:00', '13:00', '17:00');
+    LimparDiaHorario(6); LimparDiaHorario(7);
+    FCmbEscala.ItemIndex := 0;
+  end
+  else if Nome = M6X1_44 then
+  begin
+    for D := 1 to 6 do DefinirDiaHorario(D, '07:00', '11:00', '12:00', '15:20');
+    LimparDiaHorario(7);
+    FCmbEscala.ItemIndex := 0;
+  end
+  else if Nome = M12X36 then
+  begin
+    DefinirDiaHorario(1, '07:00', '12:00', '13:00', '19:00');
+    for D := 2 to 7 do LimparDiaHorario(D);
+    FCmbEscala.ItemIndex := 1;
+    if Trim(FEdtEscalaInicio.Text) = '' then
+      FEdtEscalaInicio.Text := FormatDateTime('dd/mm/yyyy', Date);
+    ShowMessage('Ajuste a data do primeiro dia trabalhado da escala 12x36.');
+  end
+  else
+    Exit;
+  FEdtIntervalo.Text := '60';
+  HorEscalaChange(nil);
+  if (Trim(edtHorDescricao.Text) = '') or (Pos('Novo Horário', edtHorDescricao.Text) = 1) then
+    edtHorDescricao.Text := Copy(Nome, 1, Pos(' (', Nome + ' (') - 1);
+end;
+
+// Escala semanal: só a grade; 12x36 e ciclo precisam do primeiro dia trabalhado; o ciclo também de trabalha/folga
+procedure TfrmMain.HorEscalaChange(Sender: TObject);
+begin
+  FEdtEscalaInicio.Enabled := FCmbEscala.ItemIndex > 0;
+  FEdtCicloTrab.Enabled := FCmbEscala.ItemIndex = 2;
+  FEdtCicloFolga.Enabled := FCmbEscala.ItemIndex = 2;
+end;
+
+procedure TfrmMain.HorDiaChange(Sender: TObject);
+begin
+  AtualizarCargaDiaHorario(TComponent(Sender).Tag div 10);
+end;
+
+procedure TfrmMain.HorDiaExit(Sender: TObject);
+begin
+  TEdit(Sender).Text := NormalizaHoraTxt(TEdit(Sender).Text);
+end;
+
+procedure TfrmMain.HorCopiarSegundaClick(Sender: TObject);
+var
+  D, K: Integer;
+begin
+  for D := 2 to 5 do
+    for K := 0 to 3 do
+      FHorEdt[D, K].Text := FHorEdt[1, K].Text;
+end;
+
+// Horários no formato gravado (1ª entrada, 1ª saída, 2ª entrada, 2ª saída) -> campos da tela
+// (Entrada, Saída almoço, Volta almoço, Saída). Sem 2º período = sem almoço.
+procedure TfrmMain.DefinirDiaHorario(D: Integer; const E1, S1, E2, S2: string);
+var
+  SemAlmoco: Boolean;
+begin
+  SemAlmoco := (Trim(E2) = '') and (Trim(S2) = '');
+  FHorEdt[D, 0].Text := Copy(Trim(E1), 1, 5);
+  if SemAlmoco then
+  begin
+    FHorEdt[D, 1].Text := '';
+    FHorEdt[D, 2].Text := '';
+    FHorEdt[D, 3].Text := Copy(Trim(S1), 1, 5);
+  end
+  else
+  begin
+    FHorEdt[D, 1].Text := Copy(Trim(S1), 1, 5);
+    FHorEdt[D, 2].Text := Copy(Trim(E2), 1, 5);
+    FHorEdt[D, 3].Text := Copy(Trim(S2), 1, 5);
+  end;
+end;
+
+procedure TfrmMain.LimparDiaHorario(D: Integer);
+begin
+  DefinirDiaHorario(D, '', '', '', '');
+end;
+
 procedure TfrmMain.LimparFormHorario;
+var
+  D: Integer;
 begin
   FSelectedHorarioId := 0;
   edtHorDescricao.Text := 'Novo Horário Comercial';
-  edtHorEntrada1.Text := '08:00';
-  edtHorSaida1.Text := '12:00';
-  edtHorEntrada2.Text := '13:12';
-  edtHorSaida2.Text := '18:00';
   edtHorTolerancia.Text := '10';
-  edtHorCarga.Text := '528';
-  chkHorCompensaSab.Checked := True;
-  chkHorTrabalhaSab.Checked := False;
-  edtHorSabEntrada1.Text := '08:00';
-  edtHorSabSaida1.Text := '12:00';
-  edtHorSexSaida2.Text := '';
   chkHorAtivo.Checked := True;
+  FCmbEscala.ItemIndex := 0;
+  FEdtEscalaInicio.Text := '';
+  FEdtCicloTrab.Text := '6';
+  FEdtCicloFolga.Text := '1';
+  FEdtIntervalo.Text := '60';
+  FEdtVirada.Text := '00:00';
+  FChkBanco.Checked := False;
+  HorEscalaChange(nil);
+  // padrão: segunda a sexta 08:00-12:00 / 13:12-18:00; sábado e domingo em branco (não trabalha)
+  for D := 1 to 5 do
+    DefinirDiaHorario(D, '08:00', '12:00', '13:12', '18:00');
+  LimparDiaHorario(6);
+  LimparDiaHorario(7);
   if edtHorDescricao.CanFocus then
     edtHorDescricao.SetFocus;
 end;
 
 procedure TfrmMain.PreencherFormHorario(AQry: TDataSet);
+var
+  D, DiaSem: Integer;
+  E1, S1, E2, S2, SE1, SS1, XS2: string;
+  TrabSab: Boolean;
+  Dias: TFDQuery;
+  Achou: Boolean;
+
+  function Txt(const ACampo, APadrao: string): string;
+  begin
+    if AQry.FindField(ACampo) <> nil then
+      Result := Copy(AQry.FieldByName(ACampo).AsString, 1, 5)
+    else
+      Result := APadrao;
+  end;
+
 begin
   if (AQry = nil) or AQry.IsEmpty then
   begin
@@ -2981,66 +3505,98 @@ begin
 
   FSelectedHorarioId := AQry.FieldByName('HOR_ID').AsInteger;
   edtHorDescricao.Text := AQry.FieldByName('HOR_DESCRICAO').AsString;
-
-  if AQry.FindField('HOR_ENTRADA_1') <> nil then
-    edtHorEntrada1.Text := Copy(AQry.FieldByName('HOR_ENTRADA_1').AsString, 1, 5)
-  else
-    edtHorEntrada1.Text := '08:00';
-
-  if AQry.FindField('HOR_SAIDA_1') <> nil then
-    edtHorSaida1.Text := Copy(AQry.FieldByName('HOR_SAIDA_1').AsString, 1, 5)
-  else
-    edtHorSaida1.Text := '12:00';
-
-  if AQry.FindField('HOR_ENTRADA_2') <> nil then
-    edtHorEntrada2.Text := Copy(AQry.FieldByName('HOR_ENTRADA_2').AsString, 1, 5)
-  else
-    edtHorEntrada2.Text := '13:12';
-
-  if AQry.FindField('HOR_SAIDA_2') <> nil then
-    edtHorSaida2.Text := Copy(AQry.FieldByName('HOR_SAIDA_2').AsString, 1, 5)
-  else
-    edtHorSaida2.Text := '18:00';
-
   if AQry.FindField('HOR_TOLERANCIA_MIN') <> nil then
     edtHorTolerancia.Text := IntToStr(AQry.FieldByName('HOR_TOLERANCIA_MIN').AsInteger)
   else
     edtHorTolerancia.Text := '10';
-
-  if AQry.FindField('HOR_CARGA_DIARIA_MIN') <> nil then
-    edtHorCarga.Text := IntToStr(AQry.FieldByName('HOR_CARGA_DIARIA_MIN').AsInteger)
-  else
-    edtHorCarga.Text := '528';
-
-  if AQry.FindField('HOR_COMPENSA_SABADO') <> nil then
-    chkHorCompensaSab.Checked := SameText(AQry.FieldByName('HOR_COMPENSA_SABADO').AsString, 'S')
-  else
-    chkHorCompensaSab.Checked := True;
-
-  if AQry.FindField('HOR_TRABALHA_SABADO') <> nil then
-    chkHorTrabalhaSab.Checked := SameText(AQry.FieldByName('HOR_TRABALHA_SABADO').AsString, 'S')
-  else
-    chkHorTrabalhaSab.Checked := False;
-
-  if AQry.FindField('HOR_SAB_ENTRADA_1') <> nil then
-    edtHorSabEntrada1.Text := Copy(AQry.FieldByName('HOR_SAB_ENTRADA_1').AsString, 1, 5)
-  else
-    edtHorSabEntrada1.Text := '08:00';
-
-  if AQry.FindField('HOR_SAB_SAIDA_1') <> nil then
-    edtHorSabSaida1.Text := Copy(AQry.FieldByName('HOR_SAB_SAIDA_1').AsString, 1, 5)
-  else
-    edtHorSabSaida1.Text := '12:00';
-
-  if AQry.FindField('HOR_SEX_SAIDA_2') <> nil then
-    edtHorSexSaida2.Text := Copy(AQry.FieldByName('HOR_SEX_SAIDA_2').AsString, 1, 5)
-  else
-    edtHorSexSaida2.Text := '';
-
   if AQry.FindField('HOR_ATIVO') <> nil then
     chkHorAtivo.Checked := SameText(AQry.FieldByName('HOR_ATIVO').AsString, 'S')
   else
     chkHorAtivo.Checked := True;
+
+  // cadastros antigos (sem jornada por dia): monta a semana a partir dos campos gerais
+  E1 := Txt('HOR_ENTRADA_1', '08:00');
+  S1 := Txt('HOR_SAIDA_1', '12:00');
+  E2 := Txt('HOR_ENTRADA_2', '13:12');
+  S2 := Txt('HOR_SAIDA_2', '18:00');
+  SE1 := Txt('HOR_SAB_ENTRADA_1', '08:00');
+  SS1 := Txt('HOR_SAB_SAIDA_1', '12:00');
+  XS2 := Txt('HOR_SEX_SAIDA_2', '');
+  TrabSab := (AQry.FindField('HOR_TRABALHA_SABADO') <> nil) and
+    SameText(AQry.FieldByName('HOR_TRABALHA_SABADO').AsString, 'S');
+  for D := 1 to 5 do
+    DefinirDiaHorario(D, E1, S1, E2, S2);
+  if XS2 <> '' then
+    DefinirDiaHorario(5, E1, S1, E2, XS2);
+  if TrabSab then
+    DefinirDiaHorario(6, SE1, SS1, '', '')
+  else
+    LimparDiaHorario(6);
+  LimparDiaHorario(7);
+
+  // regras da jornada (escala, virada do dia, intervalo, banco de horas)
+  FCmbEscala.ItemIndex := 0;
+  FEdtEscalaInicio.Text := '';
+  FEdtCicloTrab.Text := '6';
+  FEdtCicloFolga.Text := '1';
+  FEdtIntervalo.Text := '60';
+  FEdtVirada.Text := '00:00';
+  FChkBanco.Checked := False;
+  try
+    Dias := dmDados.GetRegrasHorario(FSelectedHorarioId);
+    try
+      if not Dias.IsEmpty then
+      begin
+        if SameText(Dias.FieldByName('HOR_TIPO_ESCALA').AsString, '12X36') then FCmbEscala.ItemIndex := 1
+        else if SameText(Dias.FieldByName('HOR_TIPO_ESCALA').AsString, 'CICLO') then FCmbEscala.ItemIndex := 2;
+        if not Dias.FieldByName('HOR_ESCALA_INICIO').IsNull then
+          FEdtEscalaInicio.Text := FormatDateTime('dd/mm/yyyy', Dias.FieldByName('HOR_ESCALA_INICIO').AsDateTime);
+        if Dias.FieldByName('HOR_CICLO_TRABALHO').AsInteger > 0 then
+          FEdtCicloTrab.Text := IntToStr(Dias.FieldByName('HOR_CICLO_TRABALHO').AsInteger);
+        if Dias.FieldByName('HOR_CICLO_FOLGA').AsInteger > 0 then
+          FEdtCicloFolga.Text := IntToStr(Dias.FieldByName('HOR_CICLO_FOLGA').AsInteger);
+        if Dias.FieldByName('HOR_INTERVALO_MIN').AsInteger > 0 then
+          FEdtIntervalo.Text := IntToStr(Dias.FieldByName('HOR_INTERVALO_MIN').AsInteger);
+        if Trim(Dias.FieldByName('HOR_VIRADA_DIA').AsString) <> '' then
+          FEdtVirada.Text := Trim(Dias.FieldByName('HOR_VIRADA_DIA').AsString);
+        FChkBanco.Checked := Dias.FieldByName('HOR_BANCO_HORAS').AsString = 'S';
+      end;
+    finally
+      Dias.Free;
+    end;
+  except
+    // base sem as colunas das regras: mantém os padrões
+  end;
+  HorEscalaChange(nil);
+
+  // jornada dia a dia gravada (dia sem horários = folga)
+  Achou := False;
+  try
+    Dias := dmDados.GetHorarioDias(FSelectedHorarioId);
+    try
+      while not Dias.Eof do
+      begin
+        DiaSem := Dias.FieldByName('HDI_DIA_SEMANA').AsInteger;
+        if (DiaSem >= 1) and (DiaSem <= 7) then
+        begin
+          Achou := True;
+          if Dias.FieldByName('HDI_FOLGA').AsString = 'S' then
+            LimparDiaHorario(DiaSem)
+          else
+            DefinirDiaHorario(DiaSem, Dias.FieldByName('HDI_ENTRADA_1').AsString, Dias.FieldByName('HDI_SAIDA_1').AsString,
+              Dias.FieldByName('HDI_ENTRADA_2').AsString, Dias.FieldByName('HDI_SAIDA_2').AsString);
+        end;
+        Dias.Next;
+      end;
+    finally
+      Dias.Free;
+    end;
+  except
+    // base sem a tabela de jornada por dia: segue com os campos gerais
+  end;
+  if not Achou then
+    for D := 1 to 7 do
+      AtualizarCargaDiaHorario(D);
 end;
 
 procedure TfrmMain.btnNovoHorarioClick(Sender: TObject);
@@ -3061,41 +3617,208 @@ begin
     PreencherFormHorario(FdsHorarios.DataSet);
 end;
 
-procedure TfrmMain.btnSalvarHorarioClick(Sender: TObject);
+// Valida a grade semanal e grava a jornada (campos gerais + dia a dia). Os campos gerais
+// (envio ao relógio e compatibilidade) seguem o primeiro dia trabalhado da semana.
+function TfrmMain.SalvarJornadaDoForm(out ANovoId: Integer; out ADesc, AE1, AS1, AE2, AS2: string): Boolean;
 var
-  Desc, E1, S1, E2, S2, SE1, SS1, XS2: string;
-  Tol, Carga: Integer;
-  CompSab, TrabSab, Ativo: Boolean;
-  NovoId: Integer;
+  D, K, Primeiro, Carga, Tol: Integer;
+  V: array[0..3] of string;
+  G: array[0..3] of string;
+  Dados: TArray<string>;
+  Cargas: TArray<Integer>;
+  Folgas: TArray<Boolean>;
+  Vazio, TrabSab: Boolean;
+  SE1, SS1: string;
+  RegEscala, RegVirada: string;
+  RegInicio: TDateTime;
+  RegIntervalo, RegCicloT, RegCicloF, SomaSem, MaiorDia: Integer;
 begin
-  Desc := Trim(edtHorDescricao.Text);
-  if Desc = '' then
+  Result := False;
+  ANovoId := FSelectedHorarioId;
+  ADesc := Trim(edtHorDescricao.Text);
+  if ADesc = '' then
   begin
     ShowMessage('Informe a descrição da jornada de trabalho.');
-    edtHorDescricao.SetFocus;
+    if edtHorDescricao.CanFocus then
+      edtHorDescricao.SetFocus;
     Exit;
   end;
 
-  E1 := Trim(edtHorEntrada1.Text);
-  S1 := Trim(edtHorSaida1.Text);
-  E2 := Trim(edtHorEntrada2.Text);
-  S2 := Trim(edtHorSaida2.Text);
-  Tol := StrToIntDef(Trim(edtHorTolerancia.Text), 10);
-  Carga := StrToIntDef(Trim(edtHorCarga.Text), 528);
-  CompSab := chkHorCompensaSab.Checked;
-  TrabSab := chkHorTrabalhaSab.Checked;
-  SE1 := Trim(edtHorSabEntrada1.Text);
-  SS1 := Trim(edtHorSabSaida1.Text);
-  XS2 := Trim(edtHorSexSaida2.Text);
-  Ativo := chkHorAtivo.Checked;
+  SetLength(Dados, 28);
+  SetLength(Cargas, 7);
+  SetLength(Folgas, 7);
+  Primeiro := 0;
+  for D := 1 to 7 do
+  begin
+    Vazio := True;
+    for K := 0 to 3 do
+    begin
+      V[K] := NormalizaHoraTxt(FHorEdt[D, K].Text);
+      FHorEdt[D, K].Text := V[K];
+      if V[K] <> '' then
+        Vazio := False;
+    end;
+    if Vazio then
+    begin
+      Folgas[D - 1] := True;   // tudo em branco: o dia não é trabalhado
+      Continue;
+    end;
+    for K := 0 to 3 do
+      if (V[K] <> '') and (not HoraTxtValida(V[K])) then
+      begin
+        ShowMessage(Format('Horário inválido em %s. Utilize o formato HH:MM.', [NomesDiasHor[D]]));
+        Exit;
+      end;
+    if (V[0] = '') or (V[3] = '') then
+    begin
+      ShowMessage(Format('Informe a entrada e a saída de %s (ou deixe o dia inteiro em branco para folga).', [NomesDiasHor[D]]));
+      Exit;
+    end;
+    if (V[1] = '') <> (V[2] = '') then
+    begin
+      ShowMessage(Format('Informe a saída e a volta do almoço de %s (ou deixe as duas em branco).', [NomesDiasHor[D]]));
+      Exit;
+    end;
+    if V[1] <> '' then
+    begin
+      G[0] := V[0]; G[1] := V[1]; G[2] := V[2]; G[3] := V[3];
+      Cargas[D - 1] := MinutosEntreHoras(G[0], G[1]) + MinutosEntreHoras(G[2], G[3]);
+    end
+    else
+    begin
+      G[0] := V[0]; G[1] := V[3]; G[2] := ''; G[3] := '';
+      Cargas[D - 1] := MinutosEntreHoras(G[0], G[1]);
+    end;
+    for K := 0 to 3 do
+      Dados[(D - 1) * 4 + K] := G[K];
+    Folgas[D - 1] := False;
+    if Primeiro = 0 then
+      Primeiro := D;
+  end;
 
+  if Primeiro = 0 then
+  begin
+    ShowMessage('Informe ao menos um dia de trabalho na semana.');
+    Exit;
+  end;
+
+  // Limites constitucionais/CLT para a escala semanal: 44h na semana (CF art. 7º XIII) e 10h no dia (art. 59)
+  if FCmbEscala.ItemIndex = 0 then
+  begin
+    SomaSem := 0;
+    MaiorDia := 0;
+    for D := 1 to 7 do
+    begin
+      Inc(SomaSem, Cargas[D - 1]);
+      if Cargas[D - 1] > MaiorDia then
+        MaiorDia := Cargas[D - 1];
+    end;
+    if (SomaSem > 2640) and (MessageDlg(Format('A soma da semana é %s, acima do limite de 44h (CF, art. 7º, XIII).'#13#10 +
+         'Deseja salvar mesmo assim?', [TPontoCalculoService.MinutosParaHora(SomaSem)]), mtWarning, [mbYes, mbNo], 0) <> mrYes) then
+      Exit;
+    if (MaiorDia > 600) and (MessageDlg(Format('Há um dia com %s de jornada, acima de 10h (CLT, art. 59).'#13#10 +
+         'Deseja salvar mesmo assim?', [TPontoCalculoService.MinutosParaHora(MaiorDia)]), mtWarning, [mbYes, mbNo], 0) <> mrYes) then
+      Exit;
+  end;
+
+  AE1 := Dados[(Primeiro - 1) * 4];
+  AS1 := Dados[(Primeiro - 1) * 4 + 1];
+  AE2 := Dados[(Primeiro - 1) * 4 + 2];
+  AS2 := Dados[(Primeiro - 1) * 4 + 3];
+  Carga := Cargas[Primeiro - 1];
+  TrabSab := not Folgas[5];
+  SE1 := '';
+  SS1 := '';
+  if TrabSab then
+  begin
+    SE1 := Dados[20];
+    if Dados[23] <> '' then SS1 := Dados[23] else SS1 := Dados[21];
+  end;
+  Tol := StrToIntDef(Trim(edtHorTolerancia.Text), 10);
+
+  // Regras da jornada
+  RegEscala := 'SEMANAL';
+  RegInicio := 0;
+  RegCicloT := 0;
+  RegCicloF := 0;
+  if FCmbEscala.ItemIndex = 1 then RegEscala := '12X36'
+  else if FCmbEscala.ItemIndex = 2 then RegEscala := 'CICLO';
+  if RegEscala <> 'SEMANAL' then
+  begin
+    if not TryStrToDate(Trim(FEdtEscalaInicio.Text), RegInicio) then
+    begin
+      ShowMessage('Informe a data do primeiro dia trabalhado da escala (DD/MM/AAAA).');
+      Exit;
+    end;
+    if RegEscala = 'CICLO' then
+    begin
+      RegCicloT := StrToIntDef(Trim(FEdtCicloTrab.Text), 0);
+      RegCicloF := StrToIntDef(Trim(FEdtCicloFolga.Text), 0);
+      if (RegCicloT <= 0) or (RegCicloF <= 0) then
+      begin
+        ShowMessage('Informe quantos dias a escala trabalha e quantos folga (ex.: 6 e 1).');
+        Exit;
+      end;
+    end;
+  end;
+  RegVirada := NormalizaHoraTxt(FEdtVirada.Text);
+  if (RegVirada <> '') and (not HoraTxtValida(RegVirada)) then
+  begin
+    ShowMessage('Horário da virada do dia inválido. Utilize HH:MM (ex.: 00:00 ou 05:00).');
+    Exit;
+  end;
+  if RegVirada = '' then
+    RegVirada := '00:00';
+  RegIntervalo := StrToIntDef(Trim(FEdtIntervalo.Text), 60);
+  if RegIntervalo < 0 then
+    RegIntervalo := 60;
+
+  // Horário geral e dias da semana são gravados juntos: se um falhar, nada é alterado
+  // cria as tabelas que faltarem antes de abrir a transação (DDL não deve ficar dentro dela)
+  if not dmDados.TabelaExiste('TB_PONTO_HORARIO_DIA') then
+    dmDados.GarantirEstruturaComplementar;
+  dmDados.FDConnection.StartTransaction;
+  try
+    ANovoId := dmDados.SalvarHorario(FSelectedHorarioId, ADesc, AE1, AS1, AE2, AS2, Tol, Carga,
+      not TrabSab, TrabSab, SE1, SS1, chkHorAtivo.Checked, '');
+    if (ANovoId <= 0) or (not dmDados.SalvarHorarioDias(ANovoId, Dados, Cargas, Folgas)) or
+       (not dmDados.SalvarRegrasHorario(ANovoId, RegEscala, RegInicio, RegVirada, RegIntervalo, FChkBanco.Checked,
+          RegCicloT, RegCicloF)) then
+    begin
+      dmDados.FDConnection.Rollback;
+      ANovoId := FSelectedHorarioId;
+      ShowMessage('Não foi possível salvar a jornada (nada foi alterado): ' + dmDados.LastError);
+      Exit;
+    end;
+    dmDados.FDConnection.Commit;
+    FSelectedHorarioId := ANovoId;
+  except
+    on E: Exception do
+    begin
+      if dmDados.FDConnection.InTransaction then
+        dmDados.FDConnection.Rollback;
+      ANovoId := FSelectedHorarioId;
+      ShowMessage('Erro ao salvar a jornada (nada foi alterado): ' + E.Message);
+      Exit;
+    end;
+  end;
+  Result := True;
+end;
+
+procedure TfrmMain.btnSalvarHorarioClick(Sender: TObject);
+var
+  Desc, E1, S1, E2, S2: string;
+  NovoId: Integer;
+begin
   Screen.Cursor := crHourGlass;
   try
-    NovoId := dmDados.SalvarHorario(FSelectedHorarioId, Desc, E1, S1, E2, S2, Tol, Carga, CompSab, TrabSab, SE1, SS1, Ativo, XS2);
-    FSelectedHorarioId := NovoId;
+    if not SalvarJornadaDoForm(NovoId, Desc, E1, S1, E2, S2) then
+      Exit;
     LogMessage(Format('💾 Jornada [%s] (ID %d) salva com sucesso.', [Desc, NovoId]));
     CarregarHorarios;
     CarregarComboHorariosColab;
+    if Assigned(FUltimoEspelho) then
+      ApurarEspelho(True);
     ShowMessage('Jornada de trabalho salva com sucesso!');
   finally
     Screen.Cursor := crDefault;
@@ -3104,44 +3827,23 @@ end;
 
 procedure TfrmMain.btnSalvarEnviarHorarioClick(Sender: TObject);
 var
-  Desc, E1, S1, E2, S2, SE1, SS1, XS2: string;
-  Tol, Carga: Integer;
-  CompSab, TrabSab, Ativo: Boolean;
+  Desc, E1, S1, E2, S2: string;
   NovoId: Integer;
   RelId: Integer;
   SincronizouRelogio: Boolean;
 begin
-  Desc := Trim(edtHorDescricao.Text);
-  if Desc = '' then
-  begin
-    ShowMessage('Informe a descrição da jornada de trabalho.');
-    if edtHorDescricao.CanFocus then edtHorDescricao.SetFocus;
-    Exit;
-  end;
-
-  E1 := Trim(edtHorEntrada1.Text);
-  S1 := Trim(edtHorSaida1.Text);
-  E2 := Trim(edtHorEntrada2.Text);
-  S2 := Trim(edtHorSaida2.Text);
-  Tol := StrToIntDef(Trim(edtHorTolerancia.Text), 10);
-  Carga := StrToIntDef(Trim(edtHorCarga.Text), 528);
-  CompSab := chkHorCompensaSab.Checked;
-  TrabSab := chkHorTrabalhaSab.Checked;
-  SE1 := Trim(edtHorSabEntrada1.Text);
-  SS1 := Trim(edtHorSabSaida1.Text);
-  XS2 := Trim(edtHorSexSaida2.Text);
-  Ativo := chkHorAtivo.Checked;
-
   Screen.Cursor := crHourGlass;
   try
     // 1. Salvar no banco Firebird local
-    NovoId := dmDados.SalvarHorario(FSelectedHorarioId, Desc, E1, S1, E2, S2, Tol, Carga, CompSab, TrabSab, SE1, SS1, Ativo, XS2);
-    FSelectedHorarioId := NovoId;
+    if not SalvarJornadaDoForm(NovoId, Desc, E1, S1, E2, S2) then
+      Exit;
     LogMessage(Format('💾 Jornada [%s] (ID %d) salva com sucesso no banco de dados.', [Desc, NovoId]));
     CarregarHorarios;
     CarregarComboHorariosColab;
+    if Assigned(FUltimoEspelho) then
+      ApurarEspelho(True);
 
-    // 2. Sincronizar com o Relógio de Ponto Ativo
+    // 2. Sincronizar com o Relógio de Ponto Ativo (usa o primeiro dia trabalhado da semana)
     RelId := ObterRelogioAtivoId;
     SincronizouRelogio := False;
     if RelId > 0 then
@@ -3297,36 +3999,129 @@ begin
     grdEspelho.Cells[7, I + 1] := AEspelho.Dias[I].CargaPrevistaStr;
     grdEspelho.Cells[8, I + 1] := AEspelho.Dias[I].TrabalhadoStr;
     grdEspelho.Cells[9, I + 1] := AEspelho.Dias[I].ExtraStr;
-    grdEspelho.Cells[10, I + 1] := AEspelho.Dias[I].FaltaStr;
-    grdEspelho.Cells[11, I + 1] := AEspelho.Dias[I].SaldoStr;
-    grdEspelho.Cells[12, I + 1] := AEspelho.Dias[I].Ocorrencia;
+    if AEspelho.Dias[I].NoturnoMin > 0 then
+      grdEspelho.Cells[10, I + 1] := TPontoCalculoService.MinutosParaHora(AEspelho.Dias[I].NoturnoMin)
+    else
+      grdEspelho.Cells[10, I + 1] := '';
+    if AEspelho.Dias[I].IntervaloSuprimidoMin > 0 then
+      grdEspelho.Cells[11, I + 1] := TPontoCalculoService.MinutosParaHora(AEspelho.Dias[I].IntervaloSuprimidoMin)
+    else
+      grdEspelho.Cells[11, I + 1] := '';
+    grdEspelho.Cells[12, I + 1] := AEspelho.Dias[I].FaltaStr;
+    grdEspelho.Cells[13, I + 1] := AEspelho.Dias[I].SaldoStr;
+    grdEspelho.Cells[14, I + 1] := AEspelho.Dias[I].Ocorrencia;
 
     // Dias depois de hoje aparecem na grade, mas sem informações
     if AEspelho.Dias[I].Data > Date then
-      for C := 2 to 12 do
+      for C := 2 to 14 do
         grdEspelho.Cells[C, I + 1] := '';
   end;
 
-  lblCardEsp1Val.Caption := AEspelho.Resumo.TotalPrevistoStr;
-  lblCardEsp2Val.Caption := AEspelho.Resumo.TotalTrabalhadoStr;
-  lblCardEsp3Val.Caption := '+' + AEspelho.Resumo.TotalExtrasStr;
-  lblCardEsp4Val.Caption := '-' + AEspelho.Resumo.TotalFaltasStr;
-  lblCardEsp5Val.Caption := AEspelho.Resumo.SaldoTotalStr;
+  AjustarColunasEspelho;
 
-  if AEspelho.Resumo.SaldoTotalMin >= 0 then
-    lblCardEsp5Val.Font.Color := $002E7D32
-  else
-    lblCardEsp5Val.Font.Color := $00C53030;
+  with AEspelho.Resumo do
+  begin
+    lblCardEsp1Val.Caption := TotalPrevistoStr;
+    lblCardEsp2Val.Caption := TotalTrabalhadoStr;
+    lblCardEsp3Title.Caption := 'Extras 50% / 100%';
+    lblCardEsp3Val.Caption := '+' + TPontoCalculoService.MinutosParaHora(TotalExtras50Min + TotalExtrasFaixa2Min) +
+      ' / +' + TPontoCalculoService.MinutosParaHora(TotalExtras100Min);
+    lblCardEsp4Title.Caption := 'Atrasos (faltas: ' + TPontoCalculoService.MinutosParaHora(TotalFaltasMin) + ')';
+    lblCardEsp4Val.Caption := '-' + TPontoCalculoService.MinutosParaHora(TotalAtrasosMin);
+    if UsaBancoHoras then
+      lblCardEsp5Title.Caption := 'Banco de horas'
+    else
+      lblCardEsp5Title.Caption := 'Saldo do Período';
+    lblCardEsp5Val.Caption := SaldoTotalStr;
+    if SaldoTotalMin >= 0 then
+      lblCardEsp5Val.Font.Color := $002E7D32
+    else
+      lblCardEsp5Val.Font.Color := $00C53030;
+
+    // Linha de detalhes (mesmas informações do resumo do GoUp Ponto)
+    if FLblEspelhoDetalhe = nil then
+    begin
+      FLblEspelhoDetalhe := TLabel.Create(Self);
+      FLblEspelhoDetalhe.Parent := pnlEspelhoResumo;
+      FLblEspelhoDetalhe.SetBounds(15, 66, 1050, 18);
+      FLblEspelhoDetalhe.Anchors := [akLeft, akTop, akRight];
+      FLblEspelhoDetalhe.Font.Color := $00555555;
+      FLblEspelhoDetalhe.Font.Size := 9;
+      pnlEspelhoResumo.Height := 92;
+    end;
+    FLblEspelhoDetalhe.Caption := Format(
+      'Jornada: %s  •  Dias úteis: %d  •  Trabalhados: %d  •  Faltas: %d  •  DSR descontados: %d  •  ' +
+      'Feriados: %d (descontados: %d)  •  Noturno: %s  •  Interv. suprimido: %s  •  Interjornada: %s' +
+      '%s%s',
+      [JornadaDescricao, TotalDiasUteis, TotalDiasTrabalhados, TotalFaltas, DsrDescontados,
+       TotalFeriados, FeriadosDescontados, TPontoCalculoService.MinutosParaHora(TotalNoturnoMin),
+       TPontoCalculoService.MinutosParaHora(TotalIntervaloSuprimidoMin),
+       TPontoCalculoService.MinutosParaHora(TotalInterjornadaMin),
+       SeTexto(DiasExtraAcima2h > 0, Format('  •  Dias com extra acima de 2h: %d', [DiasExtraAcima2h]), ''),
+       SeTexto(SaldoAnteriorMin <> 0, '  •  Saldo anterior: ' +
+         TPontoCalculoService.MinutosParaHora(SaldoAnteriorMin, True), '') +
+       SeTexto(CreditoHorasMin <> 0, '  •  Crédito lançado: ' +
+         TPontoCalculoService.MinutosParaHora(CreditoHorasMin, True), '') +
+       SeTexto(ReflexoDsrExtrasMin > 0, '  •  Reflexo das extras no DSR: ' +
+         TPontoCalculoService.MinutosParaHora(ReflexoDsrExtrasMin), '')]);
+  end;
 end;
 
 procedure TfrmMain.btnCalcularEspelhoClick(Sender: TObject);
+begin
+  ApurarEspelho(False);
+end;
+
+// Ajusta a largura de cada coluna do espelho ao maior conteúdo (cabeçalho ou células); a sobra vai para a
+// coluna de ocorrência. Se faltar espaço, a grade rola na horizontal em vez de cortar o texto.
+procedure TfrmMain.AjustarColunasEspelho;
+const
+  MARGEM = 18;
+  MINIMO: array[0..14] of Integer = (84, 60, 62, 62, 62, 62, 70, 72, 76, 72, 62, 72, 72, 76, 160);
+var
+  C, R, W, Largura, Soma: Integer;
+begin
+  grdEspelho.Canvas.Font.Name := 'Segoe UI';
+  grdEspelho.Canvas.Font.Size := 9;
+  Soma := 0;
+  for C := 0 to grdEspelho.ColCount - 1 do
+  begin
+    grdEspelho.Canvas.Font.Style := [fsBold];
+    Largura := grdEspelho.Canvas.TextWidth(grdEspelho.Cells[C, 0]) + MARGEM + 6;
+    for R := 1 to grdEspelho.RowCount - 1 do
+    begin
+      W := grdEspelho.Canvas.TextWidth(grdEspelho.Cells[C, R]) + MARGEM;
+      if W > Largura then
+        Largura := W;
+    end;
+    if (C <= High(MINIMO)) and (Largura < MINIMO[C]) then
+      Largura := MINIMO[C];
+    grdEspelho.ColWidths[C] := Largura;
+    Inc(Soma, Largura + grdEspelho.GridLineWidth);
+  end;
+  // sobra de largura vai para a última coluna (ocorrência)
+  W := grdEspelho.ClientWidth - Soma;
+  if W > 0 then
+    grdEspelho.ColWidths[grdEspelho.ColCount - 1] := grdEspelho.ColWidths[grdEspelho.ColCount - 1] + W;
+  grdEspelho.ScrollBars := ssBoth;
+end;
+
+// Trocou colaborador ou período: refaz a apuração sem janelas nem log
+procedure TfrmMain.EspelhoFiltroChange(Sender: TObject);
+begin
+  ApurarEspelho(True);
+end;
+
+// Apura o espelho. No modo silencioso (troca de filtro, batida nova) não mostra avisos nem registra no log.
+procedure TfrmMain.ApurarEspelho(ASilencioso: Boolean);
 var
   PessoaId: Integer;
   DtIni, DtFim: TDateTime;
 begin
   if cmbEspelhoColab.ItemIndex < 0 then
   begin
-    ShowMessage('Selecione um colaborador para apurar o ponto.');
+    if not ASilencioso then
+      ShowMessage('Selecione um colaborador para apurar o ponto.');
     Exit;
   end;
 
@@ -3336,11 +4131,16 @@ begin
 
   if DtIni > DtFim then
   begin
-    ShowMessage('A data inicial do período não pode ser maior que a data final.');
+    if not ASilencioso then
+      ShowMessage('A data inicial do período não pode ser maior que a data final.');
     Exit;
   end;
 
-  Screen.Cursor := crHourGlass;
+  if not dmDados.IsConectado then
+    Exit;
+
+  if not ASilencioso then
+    Screen.Cursor := crHourGlass;
   try
     if Assigned(FUltimoEspelho) then
     begin
@@ -3348,28 +4148,40 @@ begin
       FUltimoEspelho := nil;
     end;
 
-    FUltimoEspelho := TPontoCalculoService.CalcularEspelho(PessoaId, DtIni, DtFim);
-    PreencherGridEspelho(FUltimoEspelho);
-    LogMessage(Format('📋 Espelho de Ponto apurado para [%s] no período de %s a %s. Total trabalhado: %s, Extras: +%s, Faltas: -%s, Saldo: %s.',
-      [FUltimoEspelho.Resumo.ColaboradorNome,
-       FormatDateTime('dd/mm/yyyy', DtIni),
-       FormatDateTime('dd/mm/yyyy', DtFim),
-       FUltimoEspelho.Resumo.TotalTrabalhadoStr,
-       FUltimoEspelho.Resumo.TotalExtrasStr,
-       FUltimoEspelho.Resumo.TotalFaltasStr,
-       FUltimoEspelho.Resumo.SaldoTotalStr]));
+    try
+      FUltimoEspelho := TPontoCalculoService.CalcularEspelho(PessoaId, DtIni, DtFim);
+      PreencherGridEspelho(FUltimoEspelho);
+    except
+      on E: Exception do
+      begin
+        LogMessage('❌ Falha ao apurar o espelho de ponto: ' + E.Message, True);
+        if not ASilencioso then
+          raise;
+        Exit;
+      end;
+    end;
+    if not ASilencioso then
+      LogMessage(Format('📋 Espelho de Ponto apurado para [%s] no período de %s a %s. Total trabalhado: %s, Extras: +%s, Faltas: -%s, Saldo: %s.',
+        [FUltimoEspelho.Resumo.ColaboradorNome,
+         FormatDateTime('dd/mm/yyyy', DtIni),
+         FormatDateTime('dd/mm/yyyy', DtFim),
+         FUltimoEspelho.Resumo.TotalTrabalhadoStr,
+         FUltimoEspelho.Resumo.TotalExtrasStr,
+         FUltimoEspelho.Resumo.TotalFaltasStr,
+         FUltimoEspelho.Resumo.SaldoTotalStr]));
   finally
-    Screen.Cursor := crDefault;
+    if not ASilencioso then
+      Screen.Cursor := crDefault;
   end;
 end;
 
+// Ocorrência / justificativa: tipos previstos na CLT (art. 473 e Lei 605/49) e vários dias de uma vez
 procedure TfrmMain.btnLancarJustificativaClick(Sender: TObject);
 var
-  PessoaId: Integer;
+  PessoaId, I, Dias, AbonoMin, Gravadas: Integer;
   Valores: array of string;
-  DataJus: TDateTime;
+  DataJus, DiaSel: TDateTime;
   TipoJus, MotivoJus: string;
-  AbonoMin: Integer;
 begin
   if cmbEspelhoColab.ItemIndex < 0 then
   begin
@@ -3378,53 +4190,1278 @@ begin
   end;
 
   PessoaId := Integer(NativeInt(cmbEspelhoColab.Items.Objects[cmbEspelhoColab.ItemIndex]));
+  if not DiaEspelhoSelecionado(DiaSel) then
+    DiaSel := Date;
 
-  SetLength(Valores, 4);
-  Valores[0] := FormatDateTime('dd/mm/yyyy', Date);
-  Valores[1] := 'Atestado Médico';
-  Valores[2] := 'Atestado médico de consulta';
-  Valores[3] := '0';
+  SetLength(Valores, 5);
+  Valores[0] := FormatDateTime('dd/mm/yyyy', DiaSel);
+  Valores[1] := 'Atestado médico';
+  Valores[2] := '1';
+  Valores[3] := '';
+  Valores[4] := '0';
 
-  if InputQuery('Lançar Ocorrência / Justificativa (Portaria 671)',
-       ['Data da Ocorrência (DD/MM/AAAA):',
-        'Tipo (Atestado Médico, Folga, Feriado, Declaração):',
-        'Motivo / Justificativa detalhada:',
-        'Minutos a Abonar (0 para o dia integral):'],
-       Valores) then
+  if DialogoCampos('Lançar ocorrência / justificativa',
+       cmbEspelhoColab.Text + '  •  CLT art. 473: luto 2 dias, casamento 3, nascimento 5, doação de sangue 1/ano',
+       ['Data inicial (DD/MM/AAAA):',
+        'Tipo|Atestado médico|Luto (2 dias)|Casamento (3 dias)|Nascimento de filho (5 dias)|Doação de sangue|' +
+        'Alistamento eleitoral|Vestibular / prova|Comparecimento em juízo|Acompanhar filho ao médico|' +
+        'Serviço militar|Folga / compensação|Declaração de comparecimento|Outra ocorrência',
+        'Dias consecutivos (1 = só esta data):',
+        'Motivo / justificativa detalhada:',
+        'Minutos a abonar por dia (0 = o dia integral):'],
+       Valores, $00A8449A) then
   begin
-    if not TryStrToDate(Valores[0], DataJus) then
+    if not TryStrToDate(Trim(Valores[0]), DataJus) then
     begin
-      ShowMessage('Data informada é inválida.');
+      ShowMessage('Data informada é inválida. Utilize o formato DD/MM/AAAA.');
       Exit;
     end;
-
-    TipoJus := Trim(Valores[1]);
-    MotivoJus := Trim(Valores[2]);
-    AbonoMin := StrToIntDef(Valores[3], 0);
-
-    if TipoJus = '' then
-      TipoJus := 'Atestado Médico';
-
-    if dmDados.SalvarJustificativa(PessoaId, DataJus, TipoJus, MotivoJus, AbonoMin) then
+    Dias := StrToIntDef(Trim(Valores[2]), 1);
+    if (Dias < 1) or (Dias > 60) then
     begin
-      LogMessage(Format('📝 Justificativa registrada para o colaborador (ID %d) no dia %s: %s (%s).',
-        [PessoaId, FormatDateTime('dd/mm/yyyy', DataJus), TipoJus, MotivoJus]));
-      ShowMessage('Justificativa lançada com sucesso! Recalculando espelho...');
-      btnCalcularEspelhoClick(nil);
+      ShowMessage('Informe de 1 a 60 dias consecutivos. Para períodos longos use "Afastamentos".');
+      Exit;
+    end;
+    TipoJus := Trim(Valores[1]);
+    if TipoJus = '' then
+      TipoJus := 'Atestado médico';
+    MotivoJus := Trim(Valores[3]);
+    AbonoMin := StrToIntDef(Trim(Valores[4]), 0);
+
+    Gravadas := 0;
+    for I := 0 to Dias - 1 do
+      if dmDados.SalvarJustificativa(PessoaId, DataJus + I, TipoJus, MotivoJus, AbonoMin) then
+        Inc(Gravadas);
+    if Gravadas = Dias then
+    begin
+      LogMessage(Format('📝 Ocorrência registrada para %s a partir de %s (%d dia(s)): %s %s.',
+        [cmbEspelhoColab.Text, FormatDateTime('dd/mm/yyyy', DataJus), Dias, TipoJus, MotivoJus]));
+      ApurarEspelho(False);
     end
     else
-      ShowMessage('Erro ao registrar justificativa no banco de dados.');
+      ShowMessage(Format('Só foi possível registrar %d de %d dia(s). Confira o banco de dados.', [Gravadas, Dias]));
+  end;
+end;
+
+function TfrmMain.PessoaEspelhoId: Integer;
+begin
+  Result := 0;
+  if cmbEspelhoColab.ItemIndex >= 0 then
+    Result := Integer(NativeInt(cmbEspelhoColab.Items.Objects[cmbEspelhoColab.ItemIndex]));
+end;
+
+// Dia da linha selecionada na grade do espelho (a primeira linha só vale se o espelho foi apurado)
+function TfrmMain.DiaEspelhoSelecionado(out ADia: TDateTime): Boolean;
+var
+  Lista: TArray<TDiaEspelho>;
+begin
+  Result := False;
+  ADia := 0;
+  if FUltimoEspelho = nil then
+    Exit;
+  Lista := FUltimoEspelho.Dias;
+  if (grdEspelho.Row >= 1) and (grdEspelho.Row - 1 <= High(Lista)) then
+  begin
+    ADia := Lista[grdEspelho.Row - 1].Data;
+    Result := True;
   end;
 end;
 
 procedure TfrmMain.btnCorrigirBatidaEspelhoClick(Sender: TObject);
 var
-  Idx, ColabId: Integer;
+  Dia: TDateTime;
+begin
+  if PessoaEspelhoId <= 0 then
+  begin
+    ShowMessage('Selecione primeiro o colaborador no Espelho de Ponto.');
+    Exit;
+  end;
+  if not DiaEspelhoSelecionado(Dia) then
+  begin
+    ShowMessage('Clique em "Recalcular" e selecione o dia na grade (ou dê duplo clique nele) para corrigir as batidas.');
+    Exit;
+  end;
+  AbrirTelaDiaEspelho(Dia);
+end;
+
+procedure TfrmMain.grdEspelhoDblClick(Sender: TObject);
+var
+  Dia: TDateTime;
+  Cel: TGridCoord;
+  P: TPoint;
+begin
+  // Só vale o duplo clique em uma linha de dados (não no cabeçalho)
+  P := grdEspelho.ScreenToClient(Mouse.CursorPos);
+  Cel := grdEspelho.MouseCoord(P.X, P.Y);
+  if (Cel.Y < 1) or (PessoaEspelhoId <= 0) then
+    Exit;
+  if DiaEspelhoSelecionado(Dia) and (Dia <= Date) then
+    AbrirTelaDiaEspelho(Dia);
+end;
+
+// F8: salta para a próxima pendência (marcação ímpar ou falta) a partir da linha atual
+procedure TfrmMain.grdEspelhoKeyDown(Sender: TObject; var Key: Word; Shift: TShiftState);
+var
+  I, Ini: Integer;
+  Txt: string;
+begin
+  if Key <> VK_F8 then
+    Exit;
+  Key := 0;
+  Ini := grdEspelho.Row + 1;
+  for I := 0 to grdEspelho.RowCount - 2 do
+  begin
+    Txt := grdEspelho.Cells[14, ((Ini - 1 + I) mod (grdEspelho.RowCount - 1)) + 1];
+    if (Pos('Impar', Txt) > 0) or (Pos('Ímpar', Txt) > 0) or (Pos('Falta', Txt) > 0) then
+    begin
+      grdEspelho.Row := ((Ini - 1 + I) mod (grdEspelho.RowCount - 1)) + 1;
+      Exit;
+    end;
+  end;
+  ShowMessage('Nenhuma pendência (marcação ímpar ou falta) encontrada no período.');
+end;
+
+// Saldo anterior: horas (positivas ou negativas) que o colaborador já tinha, por exemplo vindas de outro sistema.
+// Entram no saldo do espelho e continuam somando nos meses seguintes.
+procedure TfrmMain.btnSaldoAnteriorClick(Sender: TObject);
+var
+  Frm: TForm;
+  Pnl: TPanel;
+  Lb: TLabel;
+  Lst: TListView;
+  Col: TListColumn;
+  Item: TListItem;
+  Qry: TFDQuery;
+  Ids: TStringList;
+  Valores: array of string;
+  PessoaId, Minutos, Sel: Integer;
+  Data: TDateTime;
+  Alterou, Continua: Boolean;
+  Res: TModalResult;
+  Tipo: string;
+
+  function NovoBotao(const ACaption: string; ALeft, ALargura: Integer; AModal: TModalResult): TButton;
+  begin
+    Result := TButton.Create(Frm);
+    Result.Parent := Frm;
+    Result.SetBounds(ALeft, 330, ALargura, 34);
+    Result.Caption := ACaption;
+    Result.ModalResult := AModal;
+  end;
+
+begin
+  PessoaId := PessoaEspelhoId;
+  if PessoaId <= 0 then
+  begin
+    ShowMessage('Selecione primeiro o colaborador no Espelho de Ponto.');
+    Exit;
+  end;
+  Alterou := False;
+  Continua := True;
+  Ids := TStringList.Create;
+  try
+    while Continua do
+    begin
+      if Alterou then
+        ApurarEspelho(True);
+      Ids.Clear;
+      Frm := TForm.Create(Self);
+      try
+        Frm.Caption := 'Saldo anterior';
+        Frm.BorderStyle := bsDialog;
+        Frm.Position := poOwnerFormCenter;
+        Frm.Font.Name := 'Segoe UI';
+        Frm.Font.Size := 9;
+        Frm.Color := $00FAF8F6;
+        Frm.ClientWidth := 640;
+        Frm.ClientHeight := 384;
+
+        Pnl := TPanel.Create(Frm);
+        Pnl.Parent := Frm;
+        Pnl.SetBounds(0, 0, 640, 68);
+        Pnl.BevelOuter := bvNone;
+        Pnl.ParentBackground := False;
+        Pnl.Color := $00A06A1B;
+        Lb := TLabel.Create(Pnl);
+        Lb.Parent := Pnl;
+        Lb.SetBounds(20, 10, 600, 26);
+        Lb.AutoSize := False;
+        Lb.Font.Size := 14;
+        Lb.Font.Style := [fsBold];
+        Lb.Font.Color := clWhite;
+        Lb.Caption := 'Saldo anterior de horas';
+        Lb := TLabel.Create(Pnl);
+        Lb.Parent := Pnl;
+        Lb.SetBounds(20, 38, 600, 20);
+        Lb.AutoSize := False;
+        Lb.Font.Color := $00F2F2F2;
+        Lb.Caption := cmbEspelhoColab.Text + '  •  entra no saldo e continua somando nos meses seguintes';
+
+        Lst := TListView.Create(Frm);
+        Lst.Parent := Frm;
+        Lst.SetBounds(12, 80, 616, 236);
+        Lst.ViewStyle := vsReport;
+        Lst.ReadOnly := True;
+        Lst.RowSelect := True;
+        Lst.GridLines := True;
+        Lst.HideSelection := False;
+        Lst.Font.Size := 10;
+        Col := Lst.Columns.Add; Col.Caption := 'Data'; Col.Width := 100;
+        Col := Lst.Columns.Add; Col.Caption := 'Horas'; Col.Width := 90;
+        Col := Lst.Columns.Add; Col.Caption := 'Tipo'; Col.Width := 120;
+        Col := Lst.Columns.Add; Col.Caption := 'Descrição / origem'; Col.Width := 280;
+
+        Qry := dmDados.GetLancamentosBancoHoras(PessoaId);
+        try
+          while not Qry.Eof do
+          begin
+            Tipo := Trim(Qry.FieldByName('BH_TIPO').AsString);
+            if Tipo = 'S' then Tipo := 'Saldo anterior'
+            else if Tipo = 'P' then Tipo := 'Pagamento em folha'
+            else if Tipo = 'F' then Tipo := 'Folga compensada'
+            else if Tipo = 'A' then Tipo := 'Ajuste';
+            Item := Lst.Items.Add;
+            Item.Caption := FormatDateTime('dd/mm/yyyy', Qry.FieldByName('BH_DATA').AsDateTime);
+            Item.SubItems.Add(TPontoCalculoService.MinutosParaHora(Qry.FieldByName('BH_MINUTOS').AsInteger, True));
+            Item.SubItems.Add(Tipo);
+            Item.SubItems.Add(Qry.FieldByName('BH_DESCRICAO').AsString);
+            Ids.Add(IntToStr(Qry.FieldByName('BH_ID').AsInteger));
+            Qry.Next;
+          end;
+        finally
+          Qry.Free;
+        end;
+        if Lst.Items.Count > 0 then
+          Lst.ItemIndex := 0;
+
+        NovoBotao('➕ Adicionar saldo', 12, 160, mrOk);
+        NovoBotao('🗑️ Excluir lançamento', 180, 170, mrIgnore);
+        NovoBotao('Fechar', 516, 112, mrCancel);
+
+        Sel := Lst.ItemIndex;
+        Res := Frm.ShowModal;
+        if Res = mrCancel then
+          Continua := False
+        else if Res = mrIgnore then
+        begin
+          if (Sel < 0) or (Sel >= Ids.Count) then
+            ShowMessage('Selecione um lançamento na lista.')
+          else if MessageDlg('Excluir este lançamento? O saldo do colaborador será recalculado.',
+                    mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+          begin
+            if dmDados.ExcluirLancamentoBancoHoras(StrToInt(Ids[Sel])) then
+            begin
+              LogMessage(Format('🗑️ Lançamento de saldo #%s excluído - %s.', [Ids[Sel], cmbEspelhoColab.Text]));
+              Alterou := True;
+            end;
+          end;
+        end
+        else if Res = mrOk then
+        begin
+          SetLength(Valores, 3);
+          Valores[0] := FormatDateTime('dd/mm/yyyy', dtpEspelhoIni.Date);
+          Valores[1] := '+00:00';
+          Valores[2] := 'Saldo de outro sistema';
+          if DialogoCampos('Adicionar saldo anterior', cmbEspelhoColab.Text,
+               ['Data de referência (DD/MM/AAAA):',
+                'Saldo em horas (use - para negativo, ex.: -05:30 ou +12:00):',
+                'Descrição / origem:'], Valores, $00A06A1B) then
+          begin
+            if not TryStrToDate(Trim(Valores[0]), Data) then
+              ShowMessage('Data informada é inválida. Utilize o formato DD/MM/AAAA.')
+            else if (not ParseSaldoHoras(Valores[1], Minutos)) or (Minutos = 0) then
+              ShowMessage('Informe o saldo em horas no formato HH:MM, com + ou -. Exemplo: -05:30')
+            else if dmDados.LancarBancoHoras(PessoaId, Data, Minutos, 'S', Trim(Valores[2])) > 0 then
+            begin
+              LogMessage(Format('🏦 Saldo anterior lançado para %s em %s: %s.',
+                [cmbEspelhoColab.Text, FormatDateTime('dd/mm/yyyy', Data),
+                 TPontoCalculoService.MinutosParaHora(Minutos, True)]));
+              Alterou := True;
+            end
+            else
+              ShowMessage('Não foi possível gravar o saldo: ' + dmDados.LastError);
+          end;
+        end;
+      finally
+        Frm.Free;
+      end;
+    end;
+  finally
+    Ids.Free;
+  end;
+  if Alterou then
+    ApurarEspelho(False);
+end;
+
+// Quadro padrão das telas de lista (afastamentos, feriados): faixa colorida e lista em colunas
+function TfrmMain.NovoQuadroLista(const ATitulo, ASub: string; ACor: TColor; const ACols: array of string;
+  const ALargs: array of Integer; out ALst: TListView): TForm;
+var
+  Pnl: TPanel;
+  Lb: TLabel;
+  Col: TListColumn;
+  I: Integer;
+begin
+  Result := TForm.Create(Self);
+  Result.Caption := ATitulo;
+  Result.BorderStyle := bsDialog;
+  Result.Position := poOwnerFormCenter;
+  Result.Font.Name := 'Segoe UI';
+  Result.Font.Size := 9;
+  Result.Color := $00FAF8F6;
+  Result.ClientWidth := 700;
+  Result.ClientHeight := 424;
+
+  Pnl := TPanel.Create(Result);
+  Pnl.Parent := Result;
+  Pnl.SetBounds(0, 0, 700, 68);
+  Pnl.BevelOuter := bvNone;
+  Pnl.ParentBackground := False;
+  Pnl.Color := ACor;
+  Lb := TLabel.Create(Pnl);
+  Lb.Parent := Pnl;
+  Lb.SetBounds(20, 10, 660, 26);
+  Lb.AutoSize := False;
+  Lb.Font.Size := 14;
+  Lb.Font.Style := [fsBold];
+  Lb.Font.Color := clWhite;
+  Lb.Caption := ATitulo;
+  Lb := TLabel.Create(Pnl);
+  Lb.Parent := Pnl;
+  Lb.SetBounds(20, 38, 660, 20);
+  Lb.AutoSize := False;
+  Lb.Font.Color := $00F2F2F2;
+  Lb.Caption := ASub;
+
+  ALst := TListView.Create(Result);
+  ALst.Parent := Result;
+  ALst.SetBounds(12, 80, 676, 288);
+  ALst.ViewStyle := vsReport;
+  ALst.ReadOnly := True;
+  ALst.RowSelect := True;
+  ALst.GridLines := True;
+  ALst.HideSelection := False;
+  ALst.Font.Size := 10;
+  for I := 0 to High(ACols) do
+  begin
+    Col := ALst.Columns.Add;
+    Col.Caption := ACols[I];
+    Col.Width := ALargs[I];
+  end;
+end;
+
+function BotaoDoQuadro(AForm: TForm; const ACaption: string; ALeft, ALargura: Integer; AModal: TModalResult): TButton;
+begin
+  Result := TButton.Create(AForm);
+  Result.Parent := AForm;
+  Result.SetBounds(ALeft, 378, ALargura, 34);
+  Result.Caption := ACaption;
+  Result.ModalResult := AModal;
+end;
+
+// Afastamentos: férias, licenças, INSS... No período não há jornada prevista, falta nem desconto de DSR
+procedure TfrmMain.btnAfastamentosClick(Sender: TObject);
+var
+  Frm: TForm;
+  Lst: TListView;
+  Qry: TFDQuery;
+  Item: TListItem;
+  Ids: TStringList;
+  Valores: array of string;
+  PessoaId, Sel: Integer;
+  Alterou, Continua: Boolean;
+  Res: TModalResult;
+  Ini, Fim: TDateTime;
+begin
+  PessoaId := PessoaEspelhoId;
+  if PessoaId <= 0 then
+  begin
+    ShowMessage('Selecione primeiro o colaborador no Espelho de Ponto.');
+    Exit;
+  end;
+  Alterou := False;
+  Continua := True;
+  Ids := TStringList.Create;
+  try
+    while Continua do
+    begin
+      if Alterou then
+        ApurarEspelho(True);
+      Ids.Clear;
+      Frm := NovoQuadroLista('Afastamentos', cmbEspelhoColab.Text + '  •  férias, licenças e INSS: não geram falta nem desconto',
+        $0088571B, ['Início', 'Fim', 'Tipo', 'Motivo / observação'], [95, 95, 190, 280], Lst);
+      try
+        Qry := dmDados.GetAfastamentos(PessoaId);
+        try
+          while not Qry.Eof do
+          begin
+            Item := Lst.Items.Add;
+            Item.Caption := FormatDateTime('dd/mm/yyyy', Qry.FieldByName('AFA_INICIO').AsDateTime);
+            Item.SubItems.Add(FormatDateTime('dd/mm/yyyy', Qry.FieldByName('AFA_FIM').AsDateTime));
+            Item.SubItems.Add(Qry.FieldByName('AFA_TIPO').AsString);
+            Item.SubItems.Add(Qry.FieldByName('AFA_MOTIVO').AsString);
+            Ids.Add(IntToStr(Qry.FieldByName('AFA_ID').AsInteger));
+            Qry.Next;
+          end;
+        finally
+          Qry.Free;
+        end;
+        if Lst.Items.Count > 0 then
+          Lst.ItemIndex := 0;
+        BotaoDoQuadro(Frm, '➕ Novo afastamento', 12, 170, mrOk);
+        BotaoDoQuadro(Frm, '🗑️ Excluir', 190, 120, mrIgnore);
+        BotaoDoQuadro(Frm, 'Fechar', 576, 112, mrCancel);
+
+        Sel := Lst.ItemIndex;
+        Res := Frm.ShowModal;
+        if Res = mrCancel then
+          Continua := False
+        else if Res = mrIgnore then
+        begin
+          if (Sel < 0) or (Sel >= Ids.Count) then
+            ShowMessage('Selecione um afastamento na lista.')
+          else if MessageDlg('Excluir este afastamento? Os dias voltam a ter jornada prevista.',
+                    mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+            if dmDados.ExcluirAfastamento(StrToInt(Ids[Sel])) then
+            begin
+              LogMessage(Format('🗑️ Afastamento #%s excluído - %s.', [Ids[Sel], cmbEspelhoColab.Text]));
+              Alterou := True;
+            end;
+        end
+        else if Res = mrOk then
+        begin
+          SetLength(Valores, 4);
+          Valores[0] := 'Férias';
+          Valores[1] := FormatDateTime('dd/mm/yyyy', dtpEspelhoIni.Date);
+          Valores[2] := FormatDateTime('dd/mm/yyyy', dtpEspelhoIni.Date);
+          Valores[3] := '';
+          if DialogoCampos('Novo afastamento', cmbEspelhoColab.Text,
+               ['Tipo|Férias|Licença-maternidade|Licença-paternidade|Auxílio-doença (INSS)|Acidente de trabalho|' +
+                'Licença não remunerada|Suspensão|Serviço militar|Outro afastamento',
+                'Início (DD/MM/AAAA):', 'Fim (DD/MM/AAAA):', 'Motivo / observação:'], Valores, $0088571B) then
+          begin
+            if Trim(Valores[0]) = '' then
+              ShowMessage('Informe o tipo do afastamento.')
+            else if (not TryStrToDate(Trim(Valores[1]), Ini)) or (not TryStrToDate(Trim(Valores[2]), Fim)) then
+              ShowMessage('Data inválida. Utilize o formato DD/MM/AAAA.')
+            else if Fim < Ini then
+              ShowMessage('O fim do afastamento não pode ser antes do início.')
+            else if dmDados.LancarAfastamento(PessoaId, Ini, Fim, Valores[0], Valores[3]) > 0 then
+            begin
+              LogMessage(Format('🏖️ Afastamento lançado para %s: %s de %s a %s.',
+                [cmbEspelhoColab.Text, Valores[0], FormatDateTime('dd/mm/yyyy', Ini), FormatDateTime('dd/mm/yyyy', Fim)]));
+              Alterou := True;
+            end
+            else
+              ShowMessage('Não foi possível gravar o afastamento: ' + dmDados.LastError);
+          end;
+        end;
+      finally
+        Frm.Free;
+      end;
+    end;
+  finally
+    Ids.Free;
+  end;
+  if Alterou then
+    ApurarEspelho(False);
+end;
+
+// Feriados: nacionais, estaduais e municipais. Feriado nacional removido fica "desativado" (não volta sozinho).
+procedure TfrmMain.btnFeriadosClick(Sender: TObject);
+var
+  Frm: TForm;
+  Lst: TListView;
+  Qry: TFDQuery;
+  Item: TListItem;
+  Ids, Datas, Descs, Abrs, Recs: TStringList;
+  Valores: array of string;
+  Sel, Id: Integer;
+  Alterou, Continua: Boolean;
+  Res: TModalResult;
+  Data: TDateTime;
+  Abr, Rec: string;
+
+  function PedirDados(const ATitulo: string): Boolean;
+  begin
+    Result := DialogoCampos(ATitulo, 'Feriados estaduais e municipais valem para todos os colaboradores',
+      ['Data (DD/MM/AAAA):', 'Descrição:', 'Abrangência|Nacional|Estadual|Municipal', 'Repete todo ano|Sim|Não'],
+      Valores, $00137333);
+  end;
+
+  function ValidarDados: Boolean;
+  begin
+    Result := False;
+    if not TryStrToDate(Trim(Valores[0]), Data) then
+      ShowMessage('Data inválida. Utilize o formato DD/MM/AAAA.')
+    else if Trim(Valores[1]) = '' then
+      ShowMessage('Informe a descrição do feriado.')
+    else
+      Result := True;
+  end;
+
+begin
+  Alterou := False;
+  Continua := True;
+  Ids := TStringList.Create;
+  Datas := TStringList.Create;
+  Descs := TStringList.Create;
+  Abrs := TStringList.Create;
+  Recs := TStringList.Create;
+  try
+    while Continua do
+    begin
+      if Alterou then
+        ApurarEspelho(True);
+      Ids.Clear; Datas.Clear; Descs.Clear; Abrs.Clear; Recs.Clear;
+      Frm := NovoQuadroLista('Feriados', 'Os feriados nacionais fixos já vêm cadastrados; inclua os estaduais e municipais',
+        $00137333, ['Data', 'Descrição', 'Abrangência', 'Repete'], [90, 300, 140, 120], Lst);
+      try
+        Qry := dmDados.GetFeriados;
+        try
+          while not Qry.Eof do
+          begin
+            Abr := UpperCase(Qry.FieldByName('FER_ABRANGENCIA').AsString);
+            Item := Lst.Items.Add;
+            if Qry.FieldByName('FER_RECORRENTE').AsString = 'N' then
+              Item.Caption := FormatDateTime('dd/mm/yyyy', Qry.FieldByName('FER_DATA').AsDateTime)
+            else
+              Item.Caption := FormatDateTime('dd/mm', Qry.FieldByName('FER_DATA').AsDateTime);
+            Item.SubItems.Add(Qry.FieldByName('FER_DESCRICAO').AsString);
+            if Abr = 'EXCLUIDO' then Item.SubItems.Add('Desativado')
+            else if Abr = 'ESTADUAL' then Item.SubItems.Add('Estadual')
+            else if Abr = 'MUNICIPAL' then Item.SubItems.Add('Municipal')
+            else Item.SubItems.Add('Nacional');
+            Item.SubItems.Add(SeTexto(Qry.FieldByName('FER_RECORRENTE').AsString = 'N', 'Só nesta data', 'Todo ano'));
+            Ids.Add(IntToStr(Qry.FieldByName('FER_ID').AsInteger));
+            Datas.Add(FormatDateTime('dd/mm/yyyy', Qry.FieldByName('FER_DATA').AsDateTime));
+            Descs.Add(Qry.FieldByName('FER_DESCRICAO').AsString);
+            Abrs.Add(Abr);
+            Recs.Add(Qry.FieldByName('FER_RECORRENTE').AsString);
+            Qry.Next;
+          end;
+        finally
+          Qry.Free;
+        end;
+        if Lst.Items.Count > 0 then
+          Lst.ItemIndex := 0;
+        BotaoDoQuadro(Frm, '➕ Adicionar', 12, 112, mrOk);
+        BotaoDoQuadro(Frm, '✏️ Editar', 130, 100, mrRetry);
+        BotaoDoQuadro(Frm, '🗑️ Remover', 236, 112, mrIgnore);
+        BotaoDoQuadro(Frm, '↩️ Reativar', 354, 112, mrYes);
+        BotaoDoQuadro(Frm, 'Fechar', 576, 112, mrCancel);
+
+        Sel := Lst.ItemIndex;
+        Res := Frm.ShowModal;
+        SetLength(Valores, 4);
+        if Res = mrCancel then
+          Continua := False
+        else if Res = mrOk then
+        begin
+          Valores[0] := FormatDateTime('dd/mm/yyyy', Date);
+          Valores[1] := '';
+          Valores[2] := 'Municipal';
+          Valores[3] := 'Sim';
+          if PedirDados('Adicionar feriado') and ValidarDados then
+          begin
+            Abr := UpperCase(Valores[2]);
+            if dmDados.SalvarFeriado(0, Data, Valores[1], SameText(Valores[3], 'Sim'), Abr) > 0 then
+            begin
+              LogMessage(Format('📅 Feriado cadastrado: %s em %s (%s).', [Valores[1], FormatDateTime('dd/mm/yyyy', Data), Abr]));
+              Alterou := True;
+            end
+            else
+              ShowMessage('Não foi possível gravar o feriado: ' + dmDados.LastError);
+          end;
+        end
+        else if (Sel < 0) or (Sel >= Ids.Count) then
+          ShowMessage('Selecione um feriado na lista.')
+        else
+        begin
+          Id := StrToInt(Ids[Sel]);
+          if Res = mrRetry then
+          begin
+            Valores[0] := Datas[Sel];
+            Valores[1] := Descs[Sel];
+            if Abrs[Sel] = 'ESTADUAL' then Valores[2] := 'Estadual'
+            else if Abrs[Sel] = 'MUNICIPAL' then Valores[2] := 'Municipal'
+            else Valores[2] := 'Nacional';
+            Valores[3] := SeTexto(Recs[Sel] = 'N', 'Não', 'Sim');
+            if PedirDados('Editar feriado') and ValidarDados then
+            begin
+              Abr := UpperCase(Valores[2]);
+              if dmDados.SalvarFeriado(Id, Data, Valores[1], SameText(Valores[3], 'Sim'), Abr) > 0 then
+                Alterou := True
+              else
+                ShowMessage('Não foi possível gravar o feriado: ' + dmDados.LastError);
+            end;
+          end
+          else if Res = mrIgnore then
+          begin
+            Rec := SeTexto(Abrs[Sel] = 'NACIONAL', 'Este feriado nacional será desativado (não conta mais no cálculo). ' +
+              'Você pode reativá-lo depois.', 'Remover este feriado?');
+            if MessageDlg(Descs[Sel] + ' (' + Datas[Sel] + ')'#13#10 + Rec, mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+              if dmDados.RemoverFeriado(Id) then
+              begin
+                LogMessage(Format('🗑️ Feriado removido/desativado: %s (%s).', [Descs[Sel], Datas[Sel]]));
+                Alterou := True;
+              end;
+          end
+          else if Res = mrYes then
+          begin
+            if Abrs[Sel] <> 'EXCLUIDO' then
+              ShowMessage('Este feriado já está ativo.')
+            else if dmDados.ReativarFeriado(Id) then
+              Alterou := True;
+          end;
+        end;
+      finally
+        Frm.Free;
+      end;
+    end;
+  finally
+    Ids.Free; Datas.Free; Descs.Free; Abrs.Free; Recs.Free;
+  end;
+  if Alterou then
+    ApurarEspelho(False);
+end;
+
+// Navegação rápida: ajusta o período para o mês inteiro anterior/seguinte e refaz a apuração
+procedure TfrmMain.NavegarMesEspelho(ADelta: Integer);
+var
+  Base: TDateTime;
+begin
+  Base := IncMonth(StartOfTheMonth(dtpEspelhoIni.Date), ADelta);
+  dtpEspelhoIni.Date := Base;
+  dtpEspelhoFim.Date := EndOfTheMonth(Base);
+  ApurarEspelho(True);
+end;
+
+procedure TfrmMain.btnMesAnteriorClick(Sender: TObject);
+begin
+  NavegarMesEspelho(-1);
+end;
+
+procedure TfrmMain.btnMesSeguinteClick(Sender: TObject);
+begin
+  NavegarMesEspelho(1);
+end;
+
+// Resumo de todos os colaboradores no período (base para a folha): horas, extras 50%/100%, noturno, faltas e DSR
+procedure TfrmMain.btnResumoGeralClick(Sender: TObject);
+var
+  SB: TStringBuilder;
+  I: Integer;
+  Esp: TEspelhoPonto;
+  R: TResumoEspelho;
+  Razao, Cnpj, Endereco, Cei, CpfResp, Arquivo: string;
+  Total: TResumoEspelho;
+  Stream: TStreamWriter;
+  Qtd: Integer;
+
+  function H(AMin: Integer; ASinal: Boolean = False): string;
+  begin
+    Result := TPontoCalculoService.MinutosParaHora(AMin, ASinal);
+  end;
+
+  function Linha(const ANome: string; const AR: TResumoEspelho; ATotal: Boolean): string;
+  begin
+    Result := '<tr' + SeTexto(ATotal, ' class="total"', '') + '><td style="text-align:left">' + ANome + '</td>' +
+      '<td>' + H(AR.TotalPrevistoMin) + '</td><td>' + H(AR.TotalTrabalhadoMin) + '</td>' +
+      '<td>' + H(AR.TotalExtras50Min + AR.TotalExtrasFaixa2Min) + '</td><td>' + H(AR.TotalExtras100Min) + '</td>' +
+      '<td>' + H(AR.ReflexoDsrExtrasMin) + '</td><td>' + H(AR.NoturnoPagoMin) + '</td><td>' + H(AR.TotalAtrasosMin) + '</td><td>' + IntToStr(AR.TotalFaltas) + '</td>' +
+      '<td>' + IntToStr(AR.DsrDescontados + AR.FeriadosDescontados) + '</td><td>' + H(AR.TotalAbonadoMin) + '</td>' +
+      '<td>' + H(AR.TotalIntervaloSuprimidoMin) + '</td><td><b>' + H(AR.SaldoTotalMin, True) + '</b></td></tr>';
+  end;
+
+begin
+  if cmbEspelhoColab.Items.Count = 0 then
+  begin
+    ShowMessage('Não há colaboradores cadastrados.');
+    Exit;
+  end;
+  if dtpEspelhoIni.Date > dtpEspelhoFim.Date then
+  begin
+    ShowMessage('A data inicial do período não pode ser maior que a data final.');
+    Exit;
+  end;
+
+  Total := Default(TResumoEspelho);
+  SB := TStringBuilder.Create;
+  Screen.Cursor := crHourGlass;
+  try
+    Razao := 'Empresa';
+    Cnpj := '';
+    dmDados.GetEmpresaPrincipal(Razao, Cnpj, Endereco, Cei, CpfResp);
+    SB.AppendLine('<!DOCTYPE html><html lang="pt-BR"><head><meta charset="UTF-8"><title>Resumo geral do ponto</title><style>');
+    SB.AppendLine('body{font-family:Segoe UI,Arial,sans-serif;font-size:12px;color:#222;margin:20px}');
+    SB.AppendLine('h2{margin:0 0 4px 0;color:#1e395b} p{margin:2px 0;color:#555;font-size:11px}');
+    SB.AppendLine('table{width:100%;border-collapse:collapse;margin-top:12px}');
+    SB.AppendLine('th{background:#2b579a;color:#fff;padding:6px 4px;font-size:11px}');
+    SB.AppendLine('td{border:1px solid #e1e4e8;padding:5px 4px;text-align:center;font-size:11px}');
+    SB.AppendLine('tr:nth-child(even){background:#fafafa} .total td{background:#eef2f7;font-weight:bold}');
+    SB.AppendLine('@media print{button{display:none} body{margin:8mm}}</style></head><body>');
+    SB.AppendLine('<div style="text-align:right"><button onclick="window.print()" style="padding:8px 16px;background:#2b579a;color:#fff;border:none;border-radius:4px;cursor:pointer;font-weight:bold">Imprimir</button></div>');
+    SB.AppendLine('<h2>RESUMO GERAL DO PONTO</h2>');
+    SB.AppendLine('<p><b>Empregador:</b> ' + Razao + ' &nbsp;|&nbsp; <b>CNPJ:</b> ' + Cnpj + '</p>');
+    SB.AppendLine('<p><b>Período:</b> ' + FormatDateTime('dd/mm/yyyy', dtpEspelhoIni.Date) + ' a ' +
+      FormatDateTime('dd/mm/yyyy', dtpEspelhoFim.Date) + '</p>');
+    SB.AppendLine('<table><thead><tr><th>Colaborador</th><th>Previsto</th><th>Realizado</th><th>Extras 50%</th>' +
+      '<th>Extras 100%</th><th>Reflexo DSR s/ extras</th><th>Noturno (hora reduzida)</th><th>Atrasos</th><th>Faltas (dias)</th>' +
+      '<th>DSR/feriado descontado</th><th>Abonado</th><th>Interv. suprimido</th><th>Saldo</th></tr></thead><tbody>');
+    Qtd := 0;
+    for I := 0 to cmbEspelhoColab.Items.Count - 1 do
+    begin
+      Esp := TPontoCalculoService.CalcularEspelho(Integer(NativeInt(cmbEspelhoColab.Items.Objects[I])),
+        dtpEspelhoIni.Date, dtpEspelhoFim.Date);
+      try
+        R := Esp.Resumo;
+        if R.ColaboradorNome = '' then
+          Continue;
+        Inc(Qtd);
+        SB.AppendLine(Linha(R.ColaboradorNome, R, False));
+        Inc(Total.TotalPrevistoMin, R.TotalPrevistoMin);
+        Inc(Total.TotalTrabalhadoMin, R.TotalTrabalhadoMin);
+        Inc(Total.TotalExtras50Min, R.TotalExtras50Min + R.TotalExtrasFaixa2Min);
+        Inc(Total.TotalExtras100Min, R.TotalExtras100Min);
+        Inc(Total.NoturnoPagoMin, R.NoturnoPagoMin);
+        Inc(Total.ReflexoDsrExtrasMin, R.ReflexoDsrExtrasMin);
+        Inc(Total.TotalAtrasosMin, R.TotalAtrasosMin);
+        Inc(Total.TotalFaltas, R.TotalFaltas);
+        Inc(Total.DsrDescontados, R.DsrDescontados + R.FeriadosDescontados);
+        Inc(Total.TotalAbonadoMin, R.TotalAbonadoMin);
+        Inc(Total.TotalIntervaloSuprimidoMin, R.TotalIntervaloSuprimidoMin);
+        Inc(Total.SaldoTotalMin, R.SaldoTotalMin);
+      finally
+        Esp.Free;
+      end;
+    end;
+    // o total usa os campos de extras já somados (50% + faixa 2) e descontos juntos
+    Total.TotalExtrasFaixa2Min := 0;
+    Total.FeriadosDescontados := 0;
+    SB.AppendLine(Linha('TOTAL (' + IntToStr(Qtd) + ' colaboradores)', Total, True));
+    SB.AppendLine('</tbody></table>');
+    SB.AppendLine('<p style="margin-top:10px">Noturno em hora reduzida (art. 73 §1º CLT: 52min30s = 1h). ' +
+      'Extras em domingos, feriados e folgas da escala: 100%. DSR e feriado perdidos por falta injustificada na semana (Lei 605/49, art. 6º).</p>');
+    SB.AppendLine('</body></html>');
+
+    Arquivo := IncludeTrailingPathDelimiter(TPath.GetTempPath) + 'Resumo_Geral_' + FormatDateTime('yyyymmdd_hhnnss', Now) + '.html';
+    Stream := TStreamWriter.Create(Arquivo, False, TEncoding.UTF8);
+    try
+      Stream.Write(SB.ToString);
+    finally
+      Stream.Free;
+    end;
+  finally
+    Screen.Cursor := crDefault;
+    SB.Free;
+  end;
+  ShellExecute(0, 'open', PChar(Arquivo), nil, nil, SW_SHOWNORMAL);
+  LogMessage('📊 Resumo geral do ponto gerado: ' + Arquivo);
+end;
+
+procedure TfrmMain.btnIncluirBatidaEspelhoClick(Sender: TObject);
+var
+  Dia: TDateTime;
+begin
+  if not DiaEspelhoSelecionado(Dia) then
+    Dia := Date;
+  if IncluirBatidaEspelho(Dia) then
+    btnCalcularEspelhoClick(nil);
+end;
+
+// Corrige uma batida existente (Portaria 671: a original fica desconsiderada e uma nova é gravada)
+function TfrmMain.CorrigirBatidaExistente(AId: Integer; ADataHora: TDateTime; const ATipo: string): Boolean;
+var
   Prompts, Values: array of string;
-  DataStr, HoraStr, TipoStr, MotivoStr: string;
-  DataBat, HoraBat, DataHoraBat: TDateTime;
+  TipoStr, MotivoStr: string;
+  NovaDataHora: TDateTime;
   NovoId: Integer;
 begin
+  Result := False;
+  SetLength(Prompts, 4);
+  SetLength(Values, 4);
+  Prompts[0] := 'Data da Batida (DD/MM/AAAA):';
+  Values[0] := FormatDateTime('dd/mm/yyyy', ADataHora);
+  Prompts[1] := 'Hora da Batida (HH:MM:SS):';
+  Values[1] := FormatDateTime('hh:nn:ss', ADataHora);
+  Prompts[2] := 'Tipo de Batida (E = Entrada, S = Saída):';
+  Values[2] := SeTexto((ATipo = 'E') or (ATipo = 'S'), ATipo, 'E');
+  Prompts[3] := 'Motivo da Correção (Portaria 671 MTE):';
+  Values[3] := 'Esquecimento de registro';
+
+  if not DialogoCampos('Corrigir batida', Format('Batida #%d  •  %s', [AId, cmbEspelhoColab.Text]),
+       Prompts, Values, $000677D9) then
+    Exit;
+
+  MotivoStr := Trim(Values[3]);
+  if not ValidarEntradaBatida(Values[0], Values[1], Values[2], NovaDataHora, TipoStr) then
+    Exit;
+  if Length(MotivoStr) < 5 then
+  begin
+    ShowMessage('Informe o motivo da correção (mínimo 5 caracteres).');
+    Exit;
+  end;
+
+  NovoId := dmDados.CorrigirMarcacao(AId, NovaDataHora, TipoStr, MotivoStr);
+  if NovoId > 0 then
+  begin
+    LogMessage(Format('✏️ Batida #%d corrigida pela #%d em %s (%s) - %s [Motivo: %s]',
+      [AId, NovoId, FormatDateTime('dd/mm/yyyy hh:nn:ss', NovaDataHora), TipoStr, cmbEspelhoColab.Text, MotivoStr]));
+    Result := True;
+  end
+  else
+    ShowMessage('Não foi possível corrigir a batida.');
+end;
+
+// Diálogo de preenchimento no padrão visual do sistema: faixa colorida com título, um campo por linha
+// (o "Tipo de Batida" vira lista E/S) e botões de confirmar/cancelar. Substitui o InputQuery.
+function TfrmMain.DialogoCampos(const ATitulo, ASubtitulo: string; const APrompts: array of string;
+  var AValores: array of string; ACor: TColor): Boolean;
+var
+  Frm: TForm;
+  Pnl: TPanel;
+  Lb: TLabel;
+  Ed: TEdit;
+  Cb: TComboBox;
+  Ctrls: array of TWinControl;
+  BtnOk, BtnCancel: TButton;
+  I, Y, P: Integer;
+  Itens, Rotulo: string;
+begin
+  Result := False;
+  Frm := TForm.Create(Self);
+  try
+    Frm.BorderStyle := bsDialog;
+    Frm.Position := poOwnerFormCenter;
+    Frm.Font.Name := 'Segoe UI';
+    Frm.Font.Size := 9;
+    Frm.Color := $00FAF8F6;
+    Frm.Caption := ATitulo;
+    Frm.ClientWidth := 540;
+
+    Pnl := TPanel.Create(Frm);
+    Pnl.Parent := Frm;
+    Pnl.SetBounds(0, 0, 540, 68);
+    Pnl.BevelOuter := bvNone;
+    Pnl.ParentBackground := False;
+    Pnl.Color := ACor;
+
+    Lb := TLabel.Create(Pnl);
+    Lb.Parent := Pnl;
+    Lb.SetBounds(20, 10, 500, 26);
+    Lb.AutoSize := False;
+    Lb.Font.Size := 14;
+    Lb.Font.Style := [fsBold];
+    Lb.Font.Color := clWhite;
+    Lb.Caption := ATitulo;
+
+    Lb := TLabel.Create(Pnl);
+    Lb.Parent := Pnl;
+    Lb.SetBounds(20, 38, 500, 20);
+    Lb.AutoSize := False;
+    Lb.Font.Color := $00F2F2F2;
+    Lb.Caption := ASubtitulo;
+
+    SetLength(Ctrls, Length(APrompts));
+    Y := 84;
+    for I := 0 to High(APrompts) do
+    begin
+      Lb := TLabel.Create(Frm);
+      Lb.Parent := Frm;
+      Lb.SetBounds(22, Y, 496, 16);
+      Lb.AutoSize := False;
+      Lb.Font.Color := $00555555;
+      // "Rótulo|opção 1|opção 2": campo com lista de opções (também aceita texto livre)
+      Itens := '';
+      Rotulo := APrompts[I];
+      P := Pos('|', Rotulo);
+      if P > 0 then
+      begin
+        Itens := Copy(Rotulo, P + 1, MaxInt);
+        Rotulo := Copy(Rotulo, 1, P - 1);
+      end;
+      Lb.Caption := Rotulo;
+
+      if Itens <> '' then
+      begin
+        Cb := TComboBox.Create(Frm);
+        Cb.Parent := Frm;
+        Cb.Style := csDropDown;
+        Cb.Tag := 1;                       // 1 = aceita texto livre
+        Cb.Font.Size := 10;
+        Cb.SetBounds(22, Y + 19, 496, 28);
+        Cb.Items.StrictDelimiter := True;
+        Cb.Items.Delimiter := '|';
+        Cb.Items.DelimitedText := Itens;
+        if Trim(AValores[I]) <> '' then
+          Cb.Text := AValores[I]
+        else if Cb.Items.Count > 0 then
+          Cb.ItemIndex := 0;
+        Ctrls[I] := Cb;
+      end
+      else if Pos('Tipo de Batida', APrompts[I]) = 1 then
+      begin
+        Cb := TComboBox.Create(Frm);
+        Cb.Parent := Frm;
+        Cb.Style := csDropDownList;
+        Cb.Font.Size := 10;
+        Cb.SetBounds(22, Y + 19, 496, 28);
+        Cb.Items.Add('E');
+        Cb.Items.Add('S');
+        if UpperCase(Trim(AValores[I])) = 'S' then
+          Cb.ItemIndex := 1
+        else
+          Cb.ItemIndex := 0;
+        Ctrls[I] := Cb;
+      end
+      else
+      begin
+        Ed := TEdit.Create(Frm);
+        Ed.Parent := Frm;
+        Ed.Font.Size := 10;
+        Ed.SetBounds(22, Y + 19, 496, 27);
+        Ed.Text := AValores[I];
+        Ctrls[I] := Ed;
+      end;
+      Inc(Y, 58);
+    end;
+
+    BtnOk := TButton.Create(Frm);
+    BtnOk.Parent := Frm;
+    BtnOk.SetBounds(298, Y + 6, 108, 34);
+    BtnOk.Caption := '✔ Confirmar';
+    BtnOk.Font.Style := [fsBold];
+    BtnOk.Default := True;
+    BtnOk.ModalResult := mrOk;
+
+    BtnCancel := TButton.Create(Frm);
+    BtnCancel.Parent := Frm;
+    BtnCancel.SetBounds(414, Y + 6, 104, 34);
+    BtnCancel.Caption := 'Cancelar';
+    BtnCancel.Cancel := True;
+    BtnCancel.ModalResult := mrCancel;
+
+    Frm.ClientHeight := Y + 6 + 34 + 18;
+
+    if Frm.ShowModal = mrOk then
+    begin
+      for I := 0 to High(APrompts) do
+        if (Ctrls[I] is TComboBox) and (Ctrls[I].Tag = 1) then
+          AValores[I] := Trim(TComboBox(Ctrls[I]).Text)
+        else if Ctrls[I] is TComboBox then
+          AValores[I] := TComboBox(Ctrls[I]).Items[TComboBox(Ctrls[I]).ItemIndex]
+        else
+          AValores[I] := TEdit(Ctrls[I]).Text;
+      Result := True;
+    end;
+  finally
+    Frm.Free;
+  end;
+end;
+
+// Batida desconsiderada (Portaria 671): cinza e riscada na lista da tela do dia
+procedure TfrmMain.LvDiaCustomDrawItem(Sender: TCustomListView; Item: TListItem; State: TCustomDrawState;
+  var DefaultDraw: Boolean);
+begin
+  if Item.Data <> nil then
+  begin
+    Sender.Canvas.Font.Color := clGray;
+    Sender.Canvas.Font.Style := [fsStrikeOut];
+  end
+  else
+    Sender.Canvas.Font.Style := [];
+end;
+
+// Tela de alteração do dia: lista as batidas, corrige, desconsidera/restaura e inclui
+procedure TfrmMain.AbrirTelaDiaEspelho(ADia: TDateTime);
+var
+  Frm: TForm;
+  Lst: TListView;
+  Pnl: TPanel;
+  LblTit, LblInfo: TLabel;
+  Col: TListColumn;
+  Item: TListItem;
+  DiaInfo: TDiaEspelho;
+  TemInfo: Boolean;
+  I: Integer;
+  Origem, Situacao: string;
+  ChkSemExtra, ChkFeriado: TCheckBox;
+  SemExtra0, Feriado0: Boolean;
+  Ids, Flags, Tipos: TStringList;
+  Qry: TFDQuery;
+  Alterou, Continua: Boolean;
+  PessoaId, Sel, Id: Integer;
+  Res: TModalResult;
+  Desc: Boolean;
+  Dh: TDateTime;
+  Motivo: string;
+  Valores: array of string;
+
+  function NovoBotao(const ACaption: string; ALeft: Integer; AModal: TModalResult): TButton;
+  begin
+    Result := TButton.Create(Frm);
+    Result.Parent := Frm;
+    Result.SetBounds(ALeft, 338, 112, 34);
+    Result.Font.Name := 'Segoe UI';
+    Result.Font.Size := 9;
+    Result.Caption := ACaption;
+    Result.ModalResult := AModal;
+  end;
+
+begin
+  PessoaId := PessoaEspelhoId;
+  if PessoaId <= 0 then
+    Exit;
+  Alterou := False;
+  Continua := True;
+  Ids := TStringList.Create;
+  Flags := TStringList.Create;
+  Tipos := TStringList.Create;
+  try
+    while Continua do
+    begin
+      // Depois de qualquer alteração o espelho (e o saldo) é recalculado antes de reabrir a tela do dia
+      if Alterou then
+        ApurarEspelho(True);
+      Ids.Clear;
+      Flags.Clear;
+      Tipos.Clear;
+
+      // Resumo do dia, vindo do espelho já recalculado
+      TemInfo := False;
+      if FUltimoEspelho <> nil then
+        for I := 0 to High(FUltimoEspelho.Dias) do
+          if Trunc(FUltimoEspelho.Dias[I].Data) = Trunc(ADia) then
+          begin
+            DiaInfo := FUltimoEspelho.Dias[I];
+            TemInfo := True;
+            Break;
+          end;
+
+      Frm := TForm.Create(Self);
+      try
+        Frm.Caption := 'Batidas do dia';
+        Frm.BorderStyle := bsDialog;
+        Frm.Position := poOwnerFormCenter;
+        Frm.Font.Name := 'Segoe UI';
+        Frm.Font.Size := 9;
+        Frm.Color := $00F7F3F0;
+        Frm.ClientWidth := 640;
+        Frm.ClientHeight := 392;
+
+        Pnl := TPanel.Create(Frm);
+        Pnl.Parent := Frm;
+        Pnl.SetBounds(0, 0, 640, 66);
+        Pnl.BevelOuter := bvNone;
+        Pnl.ParentBackground := False;
+        Pnl.Color := $00633A1E;
+
+        LblTit := TLabel.Create(Pnl);
+        LblTit.Parent := Pnl;
+        LblTit.SetBounds(16, 8, 608, 24);
+        LblTit.AutoSize := False;
+        LblTit.Font.Name := 'Segoe UI';
+        LblTit.Font.Size := 13;
+        LblTit.Font.Style := [fsBold];
+        LblTit.Font.Color := clWhite;
+        LblTit.Caption := FormatDateTime('dddd, dd/mm/yyyy', ADia) + '  •  ' + cmbEspelhoColab.Text;
+
+        LblInfo := TLabel.Create(Pnl);
+        LblInfo.Parent := Pnl;
+        LblInfo.SetBounds(16, 36, 608, 20);
+        LblInfo.AutoSize := False;
+        LblInfo.Font.Name := 'Segoe UI';
+        LblInfo.Font.Size := 9;
+        LblInfo.Font.Color := $00F0D9C4;
+        if TemInfo then
+          LblInfo.Caption := Format('Previsto %s   •   Realizado %s   •   Saldo do dia %s%s',
+            [DiaInfo.CargaPrevistaStr, DiaInfo.TrabalhadoStr, DiaInfo.SaldoStr,
+             SeTexto(DiaInfo.Ocorrencia <> '', '   •   ' + DiaInfo.Ocorrencia, '')])
+        else
+          LblInfo.Caption := 'Dia sem apuração';
+
+        Lst := TListView.Create(Frm);
+        Lst.Parent := Frm;
+        Lst.SetBounds(12, 78, 616, 190);
+        Lst.ViewStyle := vsReport;
+        Lst.ReadOnly := True;
+        Lst.RowSelect := True;
+        Lst.GridLines := True;
+        Lst.HideSelection := False;
+        Lst.Font.Name := 'Segoe UI';
+        Lst.Font.Size := 10;
+        Lst.OnCustomDrawItem := LvDiaCustomDrawItem;
+        Col := Lst.Columns.Add; Col.Caption := 'Hora'; Col.Width := 100;
+        Col := Lst.Columns.Add; Col.Caption := 'Tipo'; Col.Width := 60;
+        Col := Lst.Columns.Add; Col.Caption := 'Origem'; Col.Width := 100;
+        Col := Lst.Columns.Add; Col.Caption := 'Situação / Motivo'; Col.Width := 330;
+
+        Qry := dmDados.GetMarcacoes(ADia, ADia, 0, PessoaId, False);
+        try
+          // a consulta vem em ordem decrescente: insere no início para exibir em ordem cronológica
+          while not Qry.Eof do
+          begin
+            Desc := Qry.FieldByName('PMA_DESCONSIDERADA').AsString = 'S';
+            Origem := UpperCase(Trim(Qry.FieldByName('PMA_ORIGEM').AsString));
+            if Origem = 'M' then Origem := 'Manual'
+            else if Origem = 'C' then Origem := 'Relógio'
+            else if Origem = 'B' then Origem := 'Biometria';
+            Situacao := SeTexto(Desc, 'Desconsiderada: ' + Qry.FieldByName('PMA_MOTIVO_DESCONSIDERACAO').AsString, 'Válida');
+            Item := Lst.Items.Insert(0);
+            Item.Caption := FormatDateTime('hh:nn:ss', Qry.FieldByName('PMA_DATA_HORA').AsDateTime);
+            Item.SubItems.Add(Trim(Qry.FieldByName('PMA_TIPO_BATIDA').AsString));
+            Item.SubItems.Add(Origem);
+            Item.SubItems.Add(Situacao);
+            if Desc then
+              Item.Data := Pointer(1);
+            Ids.Insert(0, IntToStr(Qry.FieldByName('PMA_ID').AsInteger));
+            Flags.Insert(0, SeTexto(Desc, 'S', 'N'));
+            Tipos.Insert(0, Trim(Qry.FieldByName('PMA_TIPO_BATIDA').AsString));
+            Qry.Next;
+          end;
+        finally
+          Qry.Free;
+        end;
+        if Lst.Items.Count > 0 then
+          Lst.ItemIndex := 0
+        else
+        begin
+          Item := Lst.Items.Add;
+          Item.Caption := 'Nenhuma batida neste dia. Use "Incluir".';
+        end;
+
+        // Ajustes do dia: valem para este colaborador nesta data
+        dmDados.LerAjusteDia(PessoaId, ADia, SemExtra0, Feriado0);
+        ChkSemExtra := TCheckBox.Create(Frm);
+        ChkSemExtra.Parent := Frm;
+        ChkSemExtra.SetBounds(14, 274, 612, 20);
+        ChkSemExtra.Caption := 'Não contar hora extra neste dia (o que passar do horário não entra no saldo)';
+        ChkSemExtra.Checked := SemExtra0;
+        ChkFeriado := TCheckBox.Create(Frm);
+        ChkFeriado.Parent := Frm;
+        ChkFeriado.SetBounds(14, 298, 612, 20);
+        ChkFeriado.Caption := 'Este dia é feriado (zera previsto e faltas; horas trabalhadas contam 100%)';
+        ChkFeriado.Checked := Feriado0;
+
+        NovoBotao('✏️ Corrigir', 12, mrOk);
+        NovoBotao('🚫 Desconsiderar / Restaurar', 132, mrIgnore).Width := 200;
+        NovoBotao('➕ Incluir', 340, mrRetry);
+        NovoBotao('Fechar', 516, mrCancel);
+
+        Sel := -1;
+        Res := Frm.ShowModal;
+        // Opções do dia: grava se mudou, em qualquer botão que tenha fechado a tela
+        if (ChkSemExtra.Checked <> SemExtra0) or (ChkFeriado.Checked <> Feriado0) then
+        begin
+          if dmDados.SalvarAjusteDia(PessoaId, ADia, ChkSemExtra.Checked, ChkFeriado.Checked) then
+          begin
+            LogMessage(Format('🗓️ Ajuste do dia %s - %s: sem hora extra = %s; feriado = %s.',
+              [FormatDateTime('dd/mm/yyyy', ADia), cmbEspelhoColab.Text,
+               SeTexto(ChkSemExtra.Checked, 'sim', 'não'), SeTexto(ChkFeriado.Checked, 'sim', 'não')]));
+            Alterou := True;
+          end
+          else
+            ShowMessage('Não foi possível salvar o ajuste do dia: ' + dmDados.LastError);
+        end;
+        case Res of
+          mrOk, mrIgnore:
+            begin
+              Sel := Lst.ItemIndex;
+              if (Sel < 0) or (Sel >= Ids.Count) then
+              begin
+                ShowMessage('Selecione uma batida na lista.');
+                Sel := -1;
+              end;
+            end;
+          mrRetry: ;
+        else
+          Continua := False;
+        end;
+        // o formulário só fecha depois de ler a seleção; as ações abaixo usam os valores já copiados
+        if Continua then
+        begin
+          if Sel >= 0 then
+          begin
+            Id := StrToInt(Ids[Sel]);
+            Desc := Flags[Sel] = 'S';
+            if Res = mrOk then
+            begin
+              if Desc then
+                ShowMessage('Esta batida já está desconsiderada. Inclua uma nova batida.')
+              else
+              begin
+                Qry := dmDados.GetMarcacoes(ADia, ADia, 0, PessoaId, True);
+                try
+                  Dh := ADia;
+                  while not Qry.Eof do
+                  begin
+                    if Qry.FieldByName('PMA_ID').AsInteger = Id then
+                      Dh := Qry.FieldByName('PMA_DATA_HORA').AsDateTime;
+                    Qry.Next;
+                  end;
+                finally
+                  Qry.Free;
+                end;
+                if CorrigirBatidaExistente(Id, Dh, Tipos[Sel]) then
+                  Alterou := True;
+              end;
+            end
+            else if Desc then
+            begin
+              if MessageDlg(Format('Voltar a considerar a batida #%d?', [Id]), mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+                if dmDados.RestaurarMarcacao(Id) then
+                begin
+                  LogMessage(Format('↩️ Batida #%d voltou a ser considerada - %s.', [Id, cmbEspelhoColab.Text]));
+                  Alterou := True;
+                end;
+            end
+            else
+            begin
+              SetLength(Valores, 1);
+              Valores[0] := 'Batida em duplicidade';
+              if DialogoCampos('Desconsiderar batida', Format('Batida #%d  •  %s', [Id, cmbEspelhoColab.Text]),
+                   ['Motivo (obrigatório pela Portaria 671 - a batida original fica guardada):'], Valores, $003030C5) then
+              begin
+                Motivo := Trim(Valores[0]);
+                if Length(Motivo) < 5 then
+                  ShowMessage('Informe o motivo com pelo menos 5 caracteres.')
+                else if dmDados.DesconsiderarMarcacao(Id, Motivo) then
+                begin
+                  LogMessage(Format('🚫 Batida #%d desconsiderada - %s. Motivo: %s', [Id, cmbEspelhoColab.Text, Motivo]));
+                  Alterou := True;
+                end;
+              end;
+            end;
+          end
+          else if Res = mrRetry then
+            if IncluirBatidaEspelho(ADia) then
+              Alterou := True;
+        end;
+      finally
+        Frm.Free;
+      end;
+    end;
+  finally
+    Ids.Free;
+    Flags.Free;
+    Tipos.Free;
+  end;
+
+  if Alterou then
+    btnCalcularEspelhoClick(nil);
+end;
+
+// Inclusão de batida manual; a data sugerida é a do dia selecionado
+function TfrmMain.IncluirBatidaEspelho(ADia: TDateTime): Boolean;
+var
+  Idx, ColabId: Integer;
+  Prompts, Values: array of string;
+  TipoStr, MotivoStr: string;
+  DataHoraBat: TDateTime;
+  NovoId: Integer;
+begin
+  Result := False;
   Idx := cmbEspelhoColab.ItemIndex;
   if Idx < 0 then
   begin
@@ -3443,7 +5480,7 @@ begin
   SetLength(Values, 4);
 
   Prompts[0] := 'Data da Batida (DD/MM/AAAA):';
-  Values[0] := FormatDateTime('dd/mm/yyyy', dtpEspelhoIni.Date);
+  Values[0] := FormatDateTime('dd/mm/yyyy', ADia);
 
   Prompts[1] := 'Hora da Batida (HH:MM:SS):';
   Values[1] := '08:00:00';
@@ -3454,43 +5491,26 @@ begin
   Prompts[3] := 'Motivo da Inclusão/Correção (Portaria 671):';
   Values[3] := 'Esquecimento de registro';
 
-  if not InputQuery(Format('Corrigir / Incluir Batida - %s', [cmbEspelhoColab.Text]), Prompts, Values) then
+  if not DialogoCampos('Incluir batida', cmbEspelhoColab.Text, Prompts, Values, $00137333) then
     Exit;
 
-  DataStr := Trim(Values[0]);
-  HoraStr := Trim(Values[1]);
-  TipoStr := UpperCase(Trim(Values[2]));
   MotivoStr := Trim(Values[3]);
-
-  if not TryStrToDate(DataStr, DataBat) then
+  if not ValidarEntradaBatida(Values[0], Values[1], Values[2], DataHoraBat, TipoStr) then
+    Exit;
+  if Length(MotivoStr) < 5 then
   begin
-    ShowMessage('Data informada é inválida.');
+    ShowMessage('Informe o motivo da inclusão (mínimo 5 caracteres).');
     Exit;
   end;
-
-  if not TryStrToTime(HoraStr, HoraBat) then
-  begin
-    ShowMessage('Hora informada é inválida.');
-    Exit;
-  end;
-
-  if (TipoStr <> 'E') and (TipoStr <> 'S') then
-  begin
-    ShowMessage('Tipo de batida inválido. Informe E para Entrada ou S para Saída.');
-    Exit;
-  end;
-
-  DataHoraBat := Trunc(DataBat) + Frac(HoraBat);
 
   Screen.Cursor := crHourGlass;
   try
-    NovoId := dmDados.InserirMarcacaoManual(ColabId, ObterRelogioAtivoId, DataHoraBat, TipoStr);
+    NovoId := dmDados.InserirMarcacaoManual(ColabId, ObterRelogioAtivoId, DataHoraBat, TipoStr, MotivoStr);
     if NovoId > 0 then
     begin
-      LogMessage(Format('✏️ Batida inserida/corrigida no espelho ID %d para %s (%s) - %s',
+      LogMessage(Format('➕ Batida incluída no espelho ID %d para %s (%s) - %s',
         [NovoId, FormatDateTime('dd/mm/yyyy hh:nn:ss', DataHoraBat), TipoStr, cmbEspelhoColab.Text]));
-      btnCalcularEspelhoClick(nil);
-      ShowMessage('Batida gravada e Espelho de Ponto recalculado com sucesso!');
+      Result := True;
     end
     else
       ShowMessage('Erro ao registrar batida no banco de dados.');
@@ -3508,7 +5528,7 @@ var
 begin
   if FUltimoEspelho = nil then
   begin
-    ShowMessage('Por favor, clique em "Apurar Ponto" antes de exportar ou visualizar o espelho.');
+    ShowMessage('Por favor, clique em "Recalcular" antes de exportar ou visualizar o espelho.');
     Exit;
   end;
 
@@ -3535,88 +5555,156 @@ procedure TfrmMain.grdEspelhoDrawCell(Sender: TObject; ACol, ARow: Longint;
 var
   Texto: string;
   TxtRect: TRect;
+  Lista: TArray<TDiaEspelho>;
+  Dia: TDiaEspelho;
+  TemDia, Hoje: Boolean;
+  Fundo, CorTxt: TColor;
+  Estilo: TFontStyles;
+  Flags: Cardinal;
 begin
   // Desenho 100% próprio (DefaultDrawing = False): pincel sólido para apagar a célula antes do texto
   grdEspelho.Canvas.Brush.Style := bsSolid;
   SetBkMode(grdEspelho.Canvas.Handle, TRANSPARENT);
+  grdEspelho.Canvas.Font.Name := 'Segoe UI';
+  grdEspelho.Canvas.Font.Size := 9;
+  Texto := grdEspelho.Cells[ACol, ARow];
 
   if (ARow = 0) then
   begin
-    grdEspelho.Canvas.Brush.Color := $009A572B; // #2B579A Azul Corporativo
+    grdEspelho.Canvas.Brush.Color := $00633A1E; // azul-marinho
     grdEspelho.Canvas.Font.Color := clWhite;
     grdEspelho.Canvas.Font.Style := [fsBold];
     grdEspelho.Canvas.FillRect(Rect);
-    Texto := grdEspelho.Cells[ACol, ARow];
     TxtRect := Rect;
-    TxtRect.Top := TxtRect.Top + 4;
-    DrawText(grdEspelho.Canvas.Handle, PChar(Texto), -1, TxtRect, DT_CENTER or DT_SINGLELINE);
+    InflateRect(TxtRect, -4, 0);
+    DrawText(grdEspelho.Canvas.Handle, PChar(Texto), -1, TxtRect,
+      DT_CENTER or DT_VCENTER or DT_SINGLELINE or DT_END_ELLIPSIS);
     Exit;
   end;
 
-  if not (gdSelected in State) then
+  // Dia desta linha (para colorir pelo tipo: feriado, folga, falta, marcação ímpar...)
+  TemDia := False;
+  Hoje := False;
+  if FUltimoEspelho <> nil then
   begin
-    if (ACol = 1) and ((grdEspelho.Cells[1, ARow] = 'Dom') or (grdEspelho.Cells[1, ARow] = 'Sáb') or (grdEspelho.Cells[1, ARow] = 'Sab')) then
-      grdEspelho.Canvas.Brush.Color := $00F5F6F8
-    else if (ARow mod 2 = 0) then
-      grdEspelho.Canvas.Brush.Color := $00FAFAFA
-    else
-      grdEspelho.Canvas.Brush.Color := clWhite;
-
-    grdEspelho.Canvas.Font.Color := clBlack;
-    grdEspelho.Canvas.Font.Style := [];
-
-    if (ACol = 9) and (grdEspelho.Cells[9, ARow] <> '00:00') and (grdEspelho.Cells[9, ARow] <> '') then
+    Lista := FUltimoEspelho.Dias;
+    if (ARow - 1 >= 0) and (ARow - 1 <= High(Lista)) then
     begin
-      grdEspelho.Canvas.Font.Color := $002E7D32;
-      grdEspelho.Canvas.Font.Style := [fsBold];
-    end
-    else if (ACol = 10) and (grdEspelho.Cells[10, ARow] <> '00:00') and (grdEspelho.Cells[10, ARow] <> '') then
-    begin
-      grdEspelho.Canvas.Font.Color := $003030C5;
-      grdEspelho.Canvas.Font.Style := [fsBold];
-    end
-    else if (ACol = 11) then
-    begin
-      if Pos('+', grdEspelho.Cells[11, ARow]) > 0 then
-      begin
-        grdEspelho.Canvas.Font.Color := $002E7D32;
-        grdEspelho.Canvas.Font.Style := [fsBold];
-      end
-      else if Pos('-', grdEspelho.Cells[11, ARow]) > 0 then
-      begin
-        grdEspelho.Canvas.Font.Color := $003030C5;
-        grdEspelho.Canvas.Font.Style := [fsBold];
-      end;
-    end
-    else if (ACol = 12) and (Pos('Falta', grdEspelho.Cells[12, ARow]) > 0) then
-    begin
-      grdEspelho.Canvas.Font.Color := $003030C5;
-      grdEspelho.Canvas.Font.Style := [fsBold];
-    end
-    else if (ACol = 12) and ((Pos('Ímpar', grdEspelho.Cells[12, ARow]) > 0) or (Pos('Impar', grdEspelho.Cells[12, ARow]) > 0)) then
-    begin
-      grdEspelho.Canvas.Font.Color := $000677D9;
-      grdEspelho.Canvas.Font.Style := [fsBold];
+      Dia := Lista[ARow - 1];
+      TemDia := True;
+      Hoje := Trunc(Dia.Data) = Trunc(Date);
     end;
-  end
-  else
-  begin
-    grdEspelho.Canvas.Brush.Color := $00FAE8D6; // azul claro de seleção
-    grdEspelho.Canvas.Font.Color := clBlack;
-    grdEspelho.Canvas.Font.Style := [fsBold];
   end;
 
-  grdEspelho.Canvas.FillRect(Rect);
-  Texto := grdEspelho.Cells[ACol, ARow];
-  TxtRect := Rect;
-  TxtRect.Left := TxtRect.Left + 4;
-  TxtRect.Right := TxtRect.Right - 4;
-  TxtRect.Top := TxtRect.Top + 4;
-
-  if (ACol in [0..11]) then
-    DrawText(grdEspelho.Canvas.Handle, PChar(Texto), -1, TxtRect, DT_CENTER or DT_SINGLELINE)
+  if ARow mod 2 = 0 then
+    Fundo := $00FBFBFB
   else
-    DrawText(grdEspelho.Canvas.Handle, PChar(Texto), -1, TxtRect, DT_LEFT or DT_SINGLELINE);
+    Fundo := clWhite;
+  CorTxt := $00333333;
+  Estilo := [];
+
+  if TemDia then
+  begin
+    if Dia.DsrDescontado then
+      Fundo := $00ECECFE            // vermelho claro: DSR/feriado perdido
+    else if Dia.FaltaDiaInteiro then
+      Fundo := $00E2E2FE            // vermelho: falta
+    else if Dia.TipoDia = tdFeriado then
+      Fundo := $00FFF3E8            // azul claro: feriado
+    else if Dia.TipoDia in [tdDomingoDSR, tdSabadoCompensado, tdFolga] then
+    begin
+      Fundo := $00F6F4F3;           // cinza: folga / DSR
+      CorTxt := $00808080;
+    end
+    else if Dia.Impar then
+      Fundo := $00D6F6FF            // amarelo: marcação ímpar
+    else if Hoje then
+      Fundo := $00E6FBFF;           // hoje
+  end;
+
+  // Cor do texto por coluna
+  if (ACol >= 2) and (ACol <= 5) and (Texto = '00:00') then
+  begin
+    CorTxt := $000677D9;            // batida à meia-noite: costuma ser lançamento errado
+    Estilo := [fsBold];
+  end
+  else if ((ACol = 7) or (ACol = 8) or (ACol = 9) or (ACol = 12)) and (Texto = '00:00') then
+    CorTxt := $00BDBDBD             // zero fica discreto
+  else if ACol = 9 then
+  begin
+    if Texto <> '' then begin CorTxt := $002E7D32; Estilo := [fsBold]; end;
+  end
+  else if ACol = 10 then
+  begin
+    if Texto <> '' then begin CorTxt := $00B03A7B; Estilo := [fsBold]; end;   // roxo: noturno
+  end
+  else if ACol = 11 then
+  begin
+    if Texto <> '' then begin CorTxt := $000677D9; Estilo := [fsBold]; end;   // laranja: intervalo
+  end
+  else if ACol = 12 then
+  begin
+    if Texto <> '' then begin CorTxt := $003030C5; Estilo := [fsBold]; end;
+  end
+  else if ACol = 13 then
+  begin
+    if Pos('+', Texto) > 0 then
+    begin
+      CorTxt := $002E7D32;
+      Estilo := [fsBold];
+    end
+    else if Pos('-', Texto) > 0 then
+    begin
+      CorTxt := $003030C5;
+      Estilo := [fsBold];
+    end
+    else if Texto = '00:00' then
+      CorTxt := $00BDBDBD;
+  end
+  else if ACol = 14 then
+  begin
+    if (Pos('Falta', Texto) > 0) or (Pos('descontado', Texto) > 0) then
+    begin
+      CorTxt := $003030C5;
+      Estilo := [fsBold];
+    end
+    else if (Pos('Ímpar', Texto) > 0) or (Pos('Impar', Texto) > 0) or (Pos('Interjornada', Texto) > 0) or
+            (Pos('Extra acima', Texto) > 0) or (Pos('Intervalo de', Texto) > 0) then
+    begin
+      CorTxt := $000677D9;
+      Estilo := [fsBold];
+    end
+    else if Pos('Feriado', Texto) > 0 then
+    begin
+      CorTxt := $00D84E1D;          // azul
+      Estilo := [fsBold];
+    end;
+  end
+  else if (ACol = 0) and Hoje then
+    Estilo := [fsBold];
+
+  if gdSelected in State then
+  begin
+    Fundo := $00FAE8D6;             // azul claro de seleção
+    Estilo := Estilo + [fsBold];
+  end;
+
+  grdEspelho.Canvas.Brush.Color := Fundo;
+  grdEspelho.Canvas.FillRect(Rect);
+  // linha divisória suave
+  grdEspelho.Canvas.Pen.Color := $00EAEAEA;
+  grdEspelho.Canvas.MoveTo(Rect.Left, Rect.Bottom - 1);
+  grdEspelho.Canvas.LineTo(Rect.Right, Rect.Bottom - 1);
+
+  grdEspelho.Canvas.Font.Color := CorTxt;
+  grdEspelho.Canvas.Font.Style := Estilo;
+  TxtRect := Rect;
+  InflateRect(TxtRect, -5, 0);
+  if ACol >= 14 then
+    Flags := DT_LEFT or DT_VCENTER or DT_SINGLELINE or DT_END_ELLIPSIS
+  else
+    Flags := DT_CENTER or DT_VCENTER or DT_SINGLELINE;
+  DrawText(grdEspelho.Canvas.Handle, PChar(Texto), -1, TxtRect, Flags);
 end;
 
 // ======================= Visual, Emojis e Grids =======================
@@ -3730,10 +5818,10 @@ begin
 
   // Aba Marcações
   btnFiltrarMarcacoes.SetBounds(490, 16, 110, 38);
-  btnEditarMarcacao.SetBounds(610, 16, 140, 38);
-  btnNovaMarcacao.SetBounds(760, 16, 135, 38);
-  btnExportarAFD.SetBounds(905, 16, 150, 38);
-  btnExcluirMarcacao.SetBounds(1065, 16, 130, 38);
+  btnEditarMarcacao.SetBounds(608, 16, 125, 38);
+  btnNovaMarcacao.SetBounds(739, 16, 125, 38);
+  btnExportarAFD.SetBounds(870, 16, 130, 38);
+  btnExcluirMarcacao.SetBounds(1006, 16, 193, 38);   // termina antes do Relatório E/S (1205)
   lblTotalMarcacoesGrid.Anchors := [akTop, akRight];
   lblTotalMarcacoesGrid.Left := pnlMarcacoesFiltro.ClientWidth - 170;
   lblTotalMarcacoesGrid.Top := 26;
@@ -3741,7 +5829,15 @@ begin
   skEditarMarcacao := CriarBtn(btnEditarMarcacao, '✏️ Corrigir Batida', sbkWarning, 8, 11, 16);
   skNovaMarcacao := CriarBtn(btnNovaMarcacao, '➕ Incluir Batida', sbkSuccess, 8, 11, 16);
   skExportarAFD := CriarBtn(btnExportarAFD, '📄 Exportar AFD', sbkPurple, 8, 11, 16);
-  skExcluirMarcacao := CriarBtn(btnExcluirMarcacao, '🗑️ Excluir Batida', sbkDanger, 8, 11, 16);
+  skExcluirMarcacao := CriarBtn(btnExcluirMarcacao, '🚫 Desconsiderar/Restaurar', sbkDanger, 8, 10, 15);
+
+  // Portaria 671: batidas desconsideradas ficam guardadas; por padrão só as válidas aparecem
+  pnlMarcacoesFiltro.Height := 90;
+  chkVerDesconsideradas := TCheckBox.Create(Self);
+  chkVerDesconsideradas.Parent := pnlMarcacoesFiltro;
+  chkVerDesconsideradas.SetBounds(12, 66, 260, 20);
+  chkVerDesconsideradas.Caption := 'Mostrar batidas desconsideradas';
+  chkVerDesconsideradas.OnClick := chkVerDesconsideradasClick;
 
   // Aba Configurações (Geral e Conexão) - 4 botões perfeitamente alinhados e espaçados
   btnSalvarConfig.SetBounds(30, 465, 210, 44);
@@ -3788,14 +5884,45 @@ begin
   skExcluirHorario := CriarBtn(btnExcluirHorario, '🗑️ Excluir', sbkDanger, 8, 11, 15);
 
   // Aba Espelho de Ponto
-  btnCalcularEspelho.SetBounds(515, 16, 140, 38);
-  btnLancarJustificativa.SetBounds(665, 16, 175, 38);
-  btnExportarEspelhoHTML.SetBounds(850, 16, 190, 38);
-  btnCorrigirBatidaEspelho.SetBounds(1050, 16, 205, 38);
-  skCalcularEspelho := CriarBtn(btnCalcularEspelho, '⚙️ Apurar Ponto', sbkPrimary, 8, 11, 16);
+  btnCalcularEspelho.SetBounds(515, 16, 125, 38);
+  btnLancarJustificativa.SetBounds(648, 16, 170, 38);
+  btnExportarEspelhoHTML.SetBounds(826, 16, 185, 38);
+  // Linha 1: colaborador, período, recalcular, ocorrência e impressão. Linha 2: batidas, saldo, afastamentos, feriados e resumo.
+  pnlEspelhoTop.Height := 112;
+  btnCorrigirBatidaEspelho.SetBounds(12, 62, 120, 38);
+  btnIncluirBatidaEspelho.SetBounds(140, 62, 120, 38);
+  btnSaldoAnterior.SetBounds(268, 62, 160, 38);
+  FBtnAfastamentos := TButton.Create(Self);
+  FBtnAfastamentos.Parent := pnlEspelhoTop;
+  FBtnAfastamentos.SetBounds(436, 62, 160, 38);
+  FBtnAfastamentos.OnClick := btnAfastamentosClick;
+  FBtnFeriados := TButton.Create(Self);
+  FBtnFeriados.Parent := pnlEspelhoTop;
+  FBtnFeriados.SetBounds(604, 62, 130, 38);
+  FBtnFeriados.OnClick := btnFeriadosClick;
+  FBtnResumoGeral := TButton.Create(Self);
+  FBtnResumoGeral.Parent := pnlEspelhoTop;
+  FBtnResumoGeral.SetBounds(742, 62, 170, 38);
+  FBtnResumoGeral.OnClick := btnResumoGeralClick;
+  FBtnMesAnt := TButton.Create(Self);
+  FBtnMesAnt.Parent := pnlEspelhoTop;
+  FBtnMesAnt.SetBounds(920, 62, 140, 38);
+  FBtnMesAnt.OnClick := btnMesAnteriorClick;
+  FBtnMesProx := TButton.Create(Self);
+  FBtnMesProx.Parent := pnlEspelhoTop;
+  FBtnMesProx.SetBounds(1068, 62, 140, 38);
+  FBtnMesProx.OnClick := btnMesSeguinteClick;
+  skCalcularEspelho := CriarBtn(btnCalcularEspelho, '🔄 Recalcular', sbkPrimary, 8, 11, 16);
   skLancarJustificativa := CriarBtn(btnLancarJustificativa, '📝 Lançar Ocorrência', sbkPurple, 8, 11, 16);
   skExportarEspelhoHTML := CriarBtn(btnExportarEspelhoHTML, '🖨️ Imprimir / Relatório', sbkSuccess, 8, 11, 16);
-  skCorrigirBatidaEspelho := CriarBtn(btnCorrigirBatidaEspelho, '✏️ Corrigir / Incluir', sbkWarning, 8, 11, 16);
+  skCorrigirBatidaEspelho := CriarBtn(btnCorrigirBatidaEspelho, '✏️ Corrigir', sbkWarning, 8, 11, 16);
+  skIncluirBatidaEspelho := CriarBtn(btnIncluirBatidaEspelho, '➕ Incluir', sbkSuccess, 8, 11, 16);
+  skSaldoAnterior := CriarBtn(btnSaldoAnterior, '🏦 Saldo anterior', sbkTeal, 8, 11, 16);
+  skAfastamentos := CriarBtn(FBtnAfastamentos, '🏖️ Afastamentos', sbkPurple, 8, 11, 16);
+  skFeriados := CriarBtn(FBtnFeriados, '📅 Feriados', sbkPrimary, 8, 11, 16);
+  skResumoGeral := CriarBtn(FBtnResumoGeral, '📊 Resumo geral', sbkSuccess, 8, 11, 16);
+  skMesAnt := CriarBtn(FBtnMesAnt, '◀ Mês anterior', sbkDark, 8, 11, 16);
+  skMesProx := CriarBtn(FBtnMesProx, 'Mês seguinte ▶', sbkDark, 8, 11, 16);
 end;
 
 procedure TfrmMain.ArredondarControles;
@@ -3827,6 +5954,8 @@ end;
 procedure TfrmMain.FormResize(Sender: TObject);
 begin
   ArredondarControles;
+  if Assigned(FUltimoEspelho) and (pgcMain.ActivePage = tabEspelho) then
+    AjustarColunasEspelho;
 
   // Evita que o total de marcações fique por cima do botão de relatório em telas estreitas
   if Assigned(skRelatorioES) then
@@ -4816,6 +6945,12 @@ begin
   Col.Title.Alignment := taCenter;
   Col.Alignment := taCenter;
   Col.Width := 95;
+
+  Col := dbgMarcacoes.Columns.Add;
+  Col.FieldName := 'PMA_MOTIVO_DESCONSIDERACAO';
+  Col.Title.Caption := 'Motivo (desconsiderada)';
+  Col.Title.Alignment := taLeftJustify;
+  Col.Width := 240;
 end;
 
 procedure TfrmMain.dbgGridDrawColumnCell(Sender: TObject; const Rect: TRect;
@@ -4858,6 +6993,15 @@ begin
   Grid.Canvas.Font.Color := TxtColor;
   Grid.Canvas.Font.Name := 'Segoe UI';
   Grid.Canvas.Font.Size := 9;
+
+  // Batida desconsiderada (Portaria 671): cinza e riscada, mas continua visível e restaurável
+  if (Grid = dbgMarcacoes) and (Grid.DataSource <> nil) and (Grid.DataSource.DataSet <> nil) and
+     (Grid.DataSource.DataSet.FindField('PMA_DESCONSIDERADA') <> nil) and
+     (Grid.DataSource.DataSet.FieldByName('PMA_DESCONSIDERADA').AsString = 'S') then
+  begin
+    Grid.Canvas.Font.Color := clGray;
+    Grid.Canvas.Font.Style := [fsStrikeOut];
+  end;
 
   IsBadge := False;
   BadgeBg := clWhite;

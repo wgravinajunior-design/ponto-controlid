@@ -6,6 +6,7 @@ uses
   Vcl.Skia,
   Vcl.Forms,
   uBuildInfo in 'uBuildInfo.pas',
+  uRegiao in 'uRegiao.pas',
   uConfig in 'uConfig.pas',
   uControlIDClient in 'uControlIDClient.pas',
   uDataModule in 'uDataModule.pas' {dmDados: TDataModule},
@@ -37,6 +38,7 @@ end;
 
 begin
   try
+    ConfigurarRegiaoBrasil;   // datas dd/mm/aaaa, horas hh:nn e calendário em português
     Application.Initialize;
     Application.MainFormOnTaskbar := True;
     Application.Title := 'Integrador Ponto Control iD';
@@ -51,6 +53,7 @@ begin
 
     if not ExecutarLogin(UsuarioNome, UsuarioAdmin) then
       Exit;
+    dmDados.UsuarioLogado := UsuarioNome;   // trilha de auditoria das correções de ponto
 
     if UsuarioAdmin then
     begin

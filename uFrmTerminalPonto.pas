@@ -87,6 +87,7 @@ type
     procedure ThreadStatus(AMsg: string; AErro: Boolean);
     procedure ThreadIdentificado(ADigital: TDigitalCadastrada; AMomento: TDateTime);
     procedure ThreadNaoIdentificado;
+    procedure ThreadTerminou(Sender: TObject);
     procedure tmrRelogioTimer(Sender: TObject);
     procedure tmrVoltarTimer(Sender: TObject);
     procedure skRecarregarClick(Sender: TObject);
@@ -479,13 +480,28 @@ begin
   FThread.OnStatus := ThreadStatus;
   FThread.OnIdentificado := ThreadIdentificado;
   FThread.OnNaoIdentificado := ThreadNaoIdentificado;
+  FThread.OnTerminate := ThreadTerminou;
   FThread.Start;
+end;
+
+// A thread tem FreeOnTerminate: se ela termina sozinha (ex.: leitor não abriu), o objeto é liberado.
+// Sem zerar FThread aqui, fechar o terminal chamaria Terminate num objeto já liberado
+// ("Cannot terminate an externally created thread").
+procedure TfrmTerminalPonto.ThreadTerminou(Sender: TObject);
+begin
+  if FThread = Sender then
+    FThread := nil;
 end;
 
 procedure TfrmTerminalPonto.PararLeitura;
 begin
   if FThread <> nil then
   begin
+    // Desliga os avisos para a thread não tocar no form que está fechando
+    FThread.OnTerminate := nil;
+    FThread.OnStatus := nil;
+    FThread.OnIdentificado := nil;
+    FThread.OnNaoIdentificado := nil;
     // FreeOnTerminate: a thread encerra sozinha ao fim da captura em andamento
     FThread.Terminate;
     FThread := nil;

@@ -89,7 +89,7 @@ begin
     // 1. Batidas do período agrupadas por colaborador
     Qry.SQL.Text :=
       'SELECT PMA_PESSOA, PMA_DATA_HORA, PMA_ORIGEM FROM TB_PONTO_MARCACAO ' +
-      'WHERE PMA_PESSOA IS NOT NULL AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' +
+      'WHERE PMA_PESSOA IS NOT NULL AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' + dmDados.CondMarcacaoValida +
       IfThen(APessoaId > 0, 'AND PMA_PESSOA = :PESSOA ', '') +
       'ORDER BY PMA_PESSOA, PMA_DATA_HORA';
     Qry.ParamByName('INI').AsDateTime := StartOfTheDay(ADataIni);
@@ -149,7 +149,8 @@ begin
       'LEFT JOIN TB_COLABORADOR C ON C.COL_PESSOA = P.PES_ID ' +
       'WHERE (P.PES_COLABORADOR = ''S'' OR C.COL_PESSOA IS NOT NULL) ' +
       '  AND (COALESCE(P.PES_STATUS, ''A'') = ''A'' OR EXISTS (SELECT 1 FROM TB_PONTO_MARCACAO M ' +
-      '       WHERE M.PMA_PESSOA = P.PES_ID AND M.PMA_DATA_HORA BETWEEN :INI AND :FIM)) ' +
+      '       WHERE M.PMA_PESSOA = P.PES_ID AND M.PMA_DATA_HORA BETWEEN :INI AND :FIM ' +
+      dmDados.CondMarcacaoValida('M.') + ')) ' +
       IfThen(APessoaId > 0, 'AND P.PES_ID = :PESSOA ', '') +
       'ORDER BY P.PES_RSOCIAL_NOME';
     Qry.ParamByName('INI').AsDateTime := StartOfTheDay(ADataIni);

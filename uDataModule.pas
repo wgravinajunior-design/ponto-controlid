@@ -3,7 +3,7 @@
 interface
 
 uses
-  System.SysUtils, System.Classes, System.DateUtils,
+  System.SysUtils, System.Classes, System.DateUtils, System.Generics.Collections,
   FireDAC.Stan.Intf, FireDAC.Stan.Option, FireDAC.Stan.Error,
   FireDAC.UI.Intf, FireDAC.Phys.Intf, FireDAC.Stan.Def, FireDAC.Stan.Pool,
   FireDAC.Stan.Async, FireDAC.Phys, FireDAC.Phys.FB, FireDAC.Phys.FBDef,
@@ -38,8 +38,45 @@ type
     FLastError: string;
     FLastMigracaoLog: string;
     FUltimaGravacaoNova: Boolean;
+    FUsuarioLogado: string;
+    FCacheCampos: TDictionary<string, Boolean>;  // campos que já existem (evita consultar o catálogo a cada chamada)
     procedure ConfigureConnection;
   public
+    // Tabelas complementares (feriados, banco de horas, ajuste do dia) e feriados nacionais fixos
+    procedure GarantirEstruturaComplementar;
+    function GarantirFeriadosNacionais: Integer;
+    // Ajuste manual de um dia: "não contar hora extra" e/ou "feriado" (zera previsto e faltas)
+    function LerAjusteDia(APessoaId: Integer; ADia: TDateTime; out ASemExtra, AFeriado: Boolean): Boolean;
+    function SalvarAjusteDia(APessoaId: Integer; ADia: TDateTime; ASemExtra, AFeriado: Boolean): Boolean;
+    // Jornada dia a dia: 1 = segunda ... 7 = domingo. ADados tem 4 horários por dia (índice (dia-1)*4 + 0..3:
+    // 1ª entrada, 1ª saída, 2ª entrada, 2ª saída). Dia sem horários = folga.
+    function GetHorarioDias(AHorarioId: Integer): TFDQuery;
+    function SalvarHorarioDias(AHorarioId: Integer; const ADados: TArray<string>;
+      const ACargas: TArray<Integer>; const AFolgas: TArray<Boolean>): Boolean;
+    // Regras da jornada: escala (SEMANAL, 12X36, CICLO), início da escala, virada do dia (turno noturno),
+    // intervalo mínimo, banco de horas e ciclo trabalho/folga
+    function GetRegrasHorario(AHorarioId: Integer): TFDQuery;
+    function SalvarRegrasHorario(AHorarioId: Integer; const AEscala: string; AEscalaInicio: TDateTime;
+      const AVirada: string; AIntervaloMin: Integer; ABancoHoras: Boolean; ACicloTrab, ACicloFolga: Integer): Boolean;
+    // Afastamentos (férias, licenças, INSS...): período em que o colaborador não tem jornada prevista
+    function GetAfastamentos(APessoaId: Integer): TFDQuery;
+    function LancarAfastamento(APessoaId: Integer; AIni, AFim: TDateTime; const ATipo, AMotivo: string): Integer;
+    function ExcluirAfastamento(AId: Integer): Boolean;
+    // Feriados cadastrados (nacionais, estaduais, municipais)
+    function GetFeriados: TFDQuery;
+    function SalvarFeriado(AId: Integer; AData: TDateTime; const ADescricao: string; ARecorrente: Boolean;
+      const AAbrangencia: string): Integer;
+    // Feriado nacional é desativado (fica marcado EXCLUIDO, para não voltar sozinho); os demais são apagados
+    function RemoverFeriado(AId: Integer): Boolean;
+    function ReativarFeriado(AId: Integer): Boolean;
+    // Lançamentos do banco de horas / saldo anterior (tipo S = saldo vindo de outro sistema)
+    function LancarBancoHoras(APessoaId: Integer; AData: TDateTime; AMinutos: Integer;
+      const ATipo, ADescricao: string): Integer;
+    function GetLancamentosBancoHoras(APessoaId: Integer): TFDQuery;
+    function ExcluirLancamentoBancoHoras(AId: Integer): Boolean;
+    // Condição SQL que exclui as batidas desconsideradas (Portaria 671); vazia se a base não tem o campo.
+    // AAlias: prefixo da tabela na consulta (ex.: 'M.'), pode ser vazio.
+    function CondMarcacaoValida(const AAlias: string = ''): string;
     function Conectar: Boolean;
     procedure Desconectar;
     function IsConectado: Boolean;
@@ -84,6 +121,8 @@ type
     function CorrigirTipoBatida(APessoaId: Integer; ADataHora: TDateTime; const ATipo: string): Boolean;
     // Recalcula Entrada/Saída das batidas do dia vindas do relógio (origem C)
     procedure RecalcularTiposDia(APessoaId: Integer; AData: TDateTime);
+    // Refaz Entrada/Saída do dia da batida (usado ao desconsiderar ou restaurar)
+    procedure ReclassificarDaMarcacao(AMarcacaoId: Integer);
     // Classifica E/S todas as batidas ainda sem tipo válido (ex.: 'Batida Ponto')
     function NormalizarTiposBatida: Integer;
 
@@ -111,11 +150,13 @@ type
       ANsr: Int64; const APis, ACpf, ATipoBatida, ATipoIdent: string): Boolean;
     function GetMarcacoes(ADataIni, ADataFim: TDateTime; ARelogioId: Integer = 0;
       APessoaId: Integer = 0; AApenasValidas: Boolean = False): TFDQuery;
-    function ExcluirMarcacao(AMarcacaoId: Integer): Boolean;
-    function AtualizarMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida: string;
-      const AMotivo: string = ''): Boolean;
     function InserirMarcacaoManual(APessoaId, ARelogioId: Integer; ADataHora: TDateTime;
-      const ATipoBatida: string): Integer;
+      const ATipoBatida: string; const AMotivo: string = ''): Integer;
+    // Portaria 671: a batida nunca é apagada; fica desconsiderada, com o motivo
+    function DesconsiderarMarcacao(AId: Integer; const AMotivo: string): Boolean;
+    function RestaurarMarcacao(AId: Integer): Boolean;
+    // Correção: desconsidera a original e grava uma nova (origem M); retorna o novo ID
+    function CorrigirMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida, AMotivo: string): Integer;
 
     // Estatísticas para Dashboard
     function GetTotalMarcacoesHoje(out ATotal: Integer): Boolean;
@@ -135,6 +176,9 @@ type
     function ObterHistoricoVersoes: TBdVersaoArray;
 
     property LastError: string read FLastError;
+    // Usuário que fez o login no sistema: vai para a trilha de auditoria das correções (Portaria 671)
+    property UsuarioLogado: string read FUsuarioLogado write FUsuarioLogado;
+    function UsuarioAuditoria: string;
     property LastMigracaoLog: string read FLastMigracaoLog;
     // True se a última chamada de GravarMarcacao inseriu um registro novo
     property UltimaGravacaoNova: Boolean read FUltimaGravacaoNova;
@@ -159,6 +203,536 @@ end;
 procedure TdmDados.DataModuleDestroy(Sender: TObject);
 begin
   Desconectar;
+  FreeAndNil(FCacheCampos);
+end;
+
+function TdmDados.UsuarioAuditoria: string;
+begin
+  Result := Trim(FUsuarioLogado);
+  if Result = '' then
+    Result := GetEnvironmentVariable('USERNAME');
+  Result := Copy(Result, 1, 40);
+end;
+
+procedure TdmDados.GarantirEstruturaComplementar;
+begin
+  // Portaria 671: a batida nunca é apagada nem sobrescrita; fica "desconsiderada", com motivo e data
+  if TabelaExiste('TB_PONTO_MARCACAO') then
+  begin
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_USUARIO_ALTERACAO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_USUARIO_ALTERACAO VARCHAR(40)');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DATA_ALTERACAO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_DATA_ALTERACAO TIMESTAMP');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_MOTIVO_AJUSTE') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_MOTIVO_AJUSTE VARCHAR(250)');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_DESCONSIDERADA CHAR(1) DEFAULT ''N''');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_ID_ORIGINAL') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_ID_ORIGINAL BIGINT');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_MOTIVO_DESCONSIDERACAO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_MOTIVO_DESCONSIDERACAO VARCHAR(250)');
+    if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DATA_DESCONSIDERACAO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_MARCACAO ADD PMA_DATA_DESCONSIDERACAO TIMESTAMP');
+  end;
+
+  // Feriados
+  if not TabelaExiste('TB_PONTO_FERIADO') then
+    ExecutarComandoDDL('CREATE TABLE TB_PONTO_FERIADO (FER_ID INTEGER NOT NULL PRIMARY KEY, FER_DATA DATE NOT NULL, ' +
+      'FER_DESCRICAO VARCHAR(80) NOT NULL, FER_RECORRENTE CHAR(1) DEFAULT ''S'', ' +
+      'FER_ABRANGENCIA VARCHAR(20) DEFAULT ''NACIONAL'')');
+  if TabelaExiste('TB_PONTO_FERIADO') and (not CampoExiste('TB_PONTO_FERIADO', 'FER_ORIGEM')) then
+    ExecutarComandoDDL('ALTER TABLE TB_PONTO_FERIADO ADD FER_ORIGEM VARCHAR(10) DEFAULT ''MANUAL''');
+  if not GeneratorExiste('GEN_PONTO_FERIADO') then
+    ExecutarComandoDDL('CREATE GENERATOR GEN_PONTO_FERIADO');
+  if TabelaExiste('TB_PONTO_FERIADO') then
+    GarantirAutoIncremento('TB_PONTO_FERIADO', 'FER_ID', 'GEN_PONTO_FERIADO');
+
+  // Banco de horas / saldo anterior
+  if not TabelaExiste('TB_PONTO_BANCO_HORAS') then
+  begin
+    ExecutarComandoDDL('CREATE TABLE TB_PONTO_BANCO_HORAS (BH_ID INTEGER NOT NULL PRIMARY KEY, BH_PESSOA INTEGER NOT NULL, ' +
+      'BH_DATA DATE NOT NULL, BH_MINUTOS INTEGER NOT NULL, BH_TIPO CHAR(1) DEFAULT ''C'', BH_DESCRICAO VARCHAR(200), ' +
+      'BH_COMPETENCIA VARCHAR(7), BH_CRIADO_EM TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
+    ExecutarComandoDDL('CREATE INDEX IDX_BH_PESSOA ON TB_PONTO_BANCO_HORAS (BH_PESSOA, BH_DATA)');
+  end;
+  if not GeneratorExiste('GEN_PONTO_BANCO_HORAS') then
+    ExecutarComandoDDL('CREATE GENERATOR GEN_PONTO_BANCO_HORAS');
+  if TabelaExiste('TB_PONTO_BANCO_HORAS') then
+    GarantirAutoIncremento('TB_PONTO_BANCO_HORAS', 'BH_ID', 'GEN_PONTO_BANCO_HORAS');
+
+  // Regras da jornada (escala, virada do dia, intervalo, banco de horas, ciclo)
+  if TabelaExiste('TB_PONTO_HORARIO') then
+  begin
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_TIPO_ESCALA') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_TIPO_ESCALA VARCHAR(10) DEFAULT ''SEMANAL''');
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_ESCALA_INICIO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_ESCALA_INICIO DATE');
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_VIRADA_DIA') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_VIRADA_DIA VARCHAR(5) DEFAULT ''00:00''');
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_INTERVALO_MIN') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_INTERVALO_MIN INTEGER DEFAULT 60');
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_BANCO_HORAS') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_BANCO_HORAS CHAR(1) DEFAULT ''N''');
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_CICLO_TRABALHO') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_CICLO_TRABALHO INTEGER');
+    if not CampoExiste('TB_PONTO_HORARIO', 'HOR_CICLO_FOLGA') then
+      ExecutarComandoDDL('ALTER TABLE TB_PONTO_HORARIO ADD HOR_CICLO_FOLGA INTEGER');
+  end;
+  if TabelaExiste('TB_PONTO_FERIADO') and (not CampoExiste('TB_PONTO_FERIADO', 'FER_ABRANGENCIA')) then
+    ExecutarComandoDDL('ALTER TABLE TB_PONTO_FERIADO ADD FER_ABRANGENCIA VARCHAR(20) DEFAULT ''NACIONAL''');
+
+  // Afastamentos
+  if not TabelaExiste('TB_PONTO_AFASTAMENTO') then
+    ExecutarComandoDDL('CREATE TABLE TB_PONTO_AFASTAMENTO (AFA_ID INTEGER NOT NULL PRIMARY KEY, AFA_PESSOA INTEGER NOT NULL, ' +
+      'AFA_INICIO DATE NOT NULL, AFA_FIM DATE NOT NULL, AFA_TIPO VARCHAR(40) NOT NULL, AFA_MOTIVO VARCHAR(250), ' +
+      'AFA_USUARIO VARCHAR(40), AFA_CRIADO_EM TIMESTAMP DEFAULT CURRENT_TIMESTAMP)');
+  if not GeneratorExiste('GEN_PONTO_AFASTAMENTO') then
+    ExecutarComandoDDL('CREATE GENERATOR GEN_PONTO_AFASTAMENTO');
+  if TabelaExiste('TB_PONTO_AFASTAMENTO') then
+    GarantirAutoIncremento('TB_PONTO_AFASTAMENTO', 'AFA_ID', 'GEN_PONTO_AFASTAMENTO');
+
+  // Jornada dia a dia (segunda a domingo; dia sem horários = folga)
+  if not TabelaExiste('TB_PONTO_HORARIO_DIA') then
+    ExecutarComandoDDL('CREATE TABLE TB_PONTO_HORARIO_DIA (HDI_HORARIO INTEGER NOT NULL, HDI_DIA_SEMANA INTEGER NOT NULL, ' +
+      'HDI_ENTRADA_1 VARCHAR(5), HDI_SAIDA_1 VARCHAR(5), HDI_ENTRADA_2 VARCHAR(5), HDI_SAIDA_2 VARCHAR(5), ' +
+      'HDI_CARGA_MIN INTEGER DEFAULT 0, HDI_FOLGA CHAR(1) DEFAULT ''N'', PRIMARY KEY (HDI_HORARIO, HDI_DIA_SEMANA))');
+
+  // Ajuste manual do dia (não contar hora extra / feriado)
+  if not TabelaExiste('TB_PONTO_DIA_AJUSTE') then
+    ExecutarComandoDDL('CREATE TABLE TB_PONTO_DIA_AJUSTE (DAJ_PESSOA INTEGER NOT NULL, DAJ_DATA DATE NOT NULL, ' +
+      'DAJ_SEM_EXTRA CHAR(1) DEFAULT ''N'', DAJ_FERIADO CHAR(1) DEFAULT ''N'', DAJ_USUARIO VARCHAR(40), ' +
+      'DAJ_ALTERADO_EM TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (DAJ_PESSOA, DAJ_DATA))');
+
+  GarantirFeriadosNacionais;
+end;
+
+// Cadastra (recorrentes, todo ano) os feriados nacionais fixos que estiverem faltando:
+// Lei 662/49 e 6.802/80 (inclui Finados) e Lei 14.759/23 (Consciência Negra). Retorna quantos foram criados.
+function TdmDados.GarantirFeriadosNacionais: Integer;
+const
+  Meses: array[0..8] of Word = (1, 4, 5, 9, 10, 11, 11, 11, 12);
+  Dias: array[0..8] of Word = (1, 21, 1, 7, 12, 2, 15, 20, 25);
+  Nomes: array[0..8] of string = ('Confraternização Universal', 'Tiradentes', 'Dia do Trabalho',
+    'Independência do Brasil', 'Nossa Senhora Aparecida', 'Finados', 'Proclamação da República',
+    'Dia Nacional de Zumbi e da Consciência Negra', 'Natal');
+var
+  Qry: TFDQuery;
+  Existentes: TStringList;
+  I: Integer;
+begin
+  Result := 0;
+  if not TabelaExiste('TB_PONTO_FERIADO') then
+    Exit;
+  Existentes := TStringList.Create;
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'SELECT FER_DATA FROM TB_PONTO_FERIADO WHERE COALESCE(FER_RECORRENTE, ''S'') = ''S''';
+    Qry.Open;
+    while not Qry.Eof do
+    begin
+      Existentes.Add(Format('%d-%d', [MonthOf(Qry.FieldByName('FER_DATA').AsDateTime),
+        DayOf(Qry.FieldByName('FER_DATA').AsDateTime)]));
+      Qry.Next;
+    end;
+    Qry.Close;
+    Qry.SQL.Text := 'INSERT INTO TB_PONTO_FERIADO (FER_DATA, FER_DESCRICAO, FER_RECORRENTE, FER_ABRANGENCIA) ' +
+      'VALUES (:D, :N, ''S'', ''NACIONAL'')';
+    for I := 0 to High(Meses) do
+      if Existentes.IndexOf(Format('%d-%d', [Meses[I], Dias[I]])) < 0 then
+      begin
+        Qry.ParamByName('D').AsDate := EncodeDate(2000, Meses[I], Dias[I]);
+        Qry.ParamByName('N').AsString := Nomes[I];
+        try
+          Qry.ExecSQL;
+          Inc(Result);
+        except
+          on E: Exception do
+            FLastError := E.Message;
+        end;
+      end;
+  finally
+    Qry.Free;
+    Existentes.Free;
+  end;
+end;
+
+function TdmDados.GetHorarioDias(AHorarioId: Integer): TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FDConnection;
+  if not TabelaExiste('TB_PONTO_HORARIO_DIA') then
+    GarantirEstruturaComplementar;
+  Result.SQL.Text := 'SELECT HDI_DIA_SEMANA, HDI_ENTRADA_1, HDI_SAIDA_1, HDI_ENTRADA_2, HDI_SAIDA_2, HDI_CARGA_MIN, ' +
+    'HDI_FOLGA FROM TB_PONTO_HORARIO_DIA WHERE HDI_HORARIO = :H ORDER BY HDI_DIA_SEMANA';
+  Result.ParamByName('H').AsInteger := AHorarioId;
+  Result.Open;
+end;
+
+function TdmDados.SalvarHorarioDias(AHorarioId: Integer; const ADados: TArray<string>;
+  const ACargas: TArray<Integer>; const AFolgas: TArray<Boolean>): Boolean;
+var
+  Qry: TFDQuery;
+  D: Integer;
+begin
+  Result := False;
+  if not TabelaExiste('TB_PONTO_HORARIO_DIA') then
+    GarantirEstruturaComplementar;
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      Qry.SQL.Text := 'DELETE FROM TB_PONTO_HORARIO_DIA WHERE HDI_HORARIO = :H';
+      Qry.ParamByName('H').AsInteger := AHorarioId;
+      Qry.ExecSQL;
+      Qry.SQL.Text := 'INSERT INTO TB_PONTO_HORARIO_DIA (HDI_HORARIO, HDI_DIA_SEMANA, HDI_ENTRADA_1, HDI_SAIDA_1, ' +
+        'HDI_ENTRADA_2, HDI_SAIDA_2, HDI_CARGA_MIN, HDI_FOLGA) VALUES (:H, :D, :E1, :S1, :E2, :S2, :C, :F)';
+      for D := 1 to 7 do
+      begin
+        Qry.ParamByName('H').AsInteger := AHorarioId;
+        Qry.ParamByName('D').AsInteger := D;
+        Qry.ParamByName('E1').AsString := Trim(ADados[(D - 1) * 4]);
+        Qry.ParamByName('S1').AsString := Trim(ADados[(D - 1) * 4 + 1]);
+        Qry.ParamByName('E2').AsString := Trim(ADados[(D - 1) * 4 + 2]);
+        Qry.ParamByName('S2').AsString := Trim(ADados[(D - 1) * 4 + 3]);
+        Qry.ParamByName('C').AsInteger := ACargas[D - 1];
+        if AFolgas[D - 1] then Qry.ParamByName('F').AsString := 'S' else Qry.ParamByName('F').AsString := 'N';
+        Qry.ExecSQL;
+      end;
+      Result := True;
+    except
+      on E: Exception do
+        FLastError := 'Erro ao salvar a jornada dia a dia: ' + E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetRegrasHorario(AHorarioId: Integer): TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FDConnection;
+  Result.SQL.Text := 'SELECT HOR_TIPO_ESCALA, HOR_ESCALA_INICIO, HOR_VIRADA_DIA, HOR_INTERVALO_MIN, HOR_BANCO_HORAS, ' +
+    'HOR_CICLO_TRABALHO, HOR_CICLO_FOLGA FROM TB_PONTO_HORARIO WHERE HOR_ID = :H';
+  Result.ParamByName('H').AsInteger := AHorarioId;
+  Result.Open;
+end;
+
+function TdmDados.SalvarRegrasHorario(AHorarioId: Integer; const AEscala: string; AEscalaInicio: TDateTime;
+  const AVirada: string; AIntervaloMin: Integer; ABancoHoras: Boolean; ACicloTrab, ACicloFolga: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      Qry.SQL.Text := 'UPDATE TB_PONTO_HORARIO SET HOR_TIPO_ESCALA = :E, HOR_ESCALA_INICIO = :I, HOR_VIRADA_DIA = :V, ' +
+        'HOR_INTERVALO_MIN = :IM, HOR_BANCO_HORAS = :B, HOR_CICLO_TRABALHO = :CT, HOR_CICLO_FOLGA = :CF WHERE HOR_ID = :ID';
+      Qry.ParamByName('E').AsString := AEscala;
+      if AEscalaInicio > 0 then
+        Qry.ParamByName('I').AsDate := Trunc(AEscalaInicio)
+      else
+        Qry.ParamByName('I').Clear;
+      Qry.ParamByName('V').AsString := AVirada;
+      Qry.ParamByName('IM').AsInteger := AIntervaloMin;
+      if ABancoHoras then Qry.ParamByName('B').AsString := 'S' else Qry.ParamByName('B').AsString := 'N';
+      if ACicloTrab > 0 then Qry.ParamByName('CT').AsInteger := ACicloTrab else Qry.ParamByName('CT').Clear;
+      if ACicloFolga > 0 then Qry.ParamByName('CF').AsInteger := ACicloFolga else Qry.ParamByName('CF').Clear;
+      Qry.ParamByName('ID').AsInteger := AHorarioId;
+      Qry.ExecSQL;
+      Result := True;
+    except
+      on E: Exception do
+        FLastError := 'Erro ao salvar as regras da jornada: ' + E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetAfastamentos(APessoaId: Integer): TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FDConnection;
+  Result.SQL.Text := 'SELECT AFA_ID, AFA_INICIO, AFA_FIM, AFA_TIPO, AFA_MOTIVO FROM TB_PONTO_AFASTAMENTO ' +
+    'WHERE AFA_PESSOA = :P ORDER BY AFA_INICIO DESC';
+  Result.ParamByName('P').AsInteger := APessoaId;
+  Result.Open;
+end;
+
+function TdmDados.LancarAfastamento(APessoaId: Integer; AIni, AFim: TDateTime; const ATipo, AMotivo: string): Integer;
+var
+  Qry: TFDQuery;
+begin
+  Result := 0;
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      Qry.SQL.Text := 'INSERT INTO TB_PONTO_AFASTAMENTO (AFA_PESSOA, AFA_INICIO, AFA_FIM, AFA_TIPO, AFA_MOTIVO, AFA_USUARIO) ' +
+        'VALUES (:P, :I, :F, :T, :M, :U) RETURNING AFA_ID';
+      Qry.ParamByName('P').AsInteger := APessoaId;
+      Qry.ParamByName('I').AsDate := Trunc(AIni);
+      Qry.ParamByName('F').AsDate := Trunc(AFim);
+      Qry.ParamByName('T').AsString := Copy(Trim(ATipo), 1, 40);
+      Qry.ParamByName('M').AsString := Copy(Trim(AMotivo), 1, 250);
+      Qry.ParamByName('U').AsString := UsuarioAuditoria;
+      Qry.Open;
+      if not Qry.IsEmpty then
+        Result := Qry.Fields[0].AsInteger;
+    except
+      on E: Exception do
+        FLastError := 'Erro ao lançar o afastamento: ' + E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.ExcluirAfastamento(AId: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'DELETE FROM TB_PONTO_AFASTAMENTO WHERE AFA_ID = :ID';
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.ExecSQL;
+    Result := Qry.RowsAffected > 0;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetFeriados: TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FDConnection;
+  Result.SQL.Text := 'SELECT FER_ID, FER_DATA, FER_DESCRICAO, COALESCE(FER_RECORRENTE, ''S'') AS FER_RECORRENTE, ' +
+    'COALESCE(FER_ABRANGENCIA, ''NACIONAL'') AS FER_ABRANGENCIA FROM TB_PONTO_FERIADO ' +
+    'ORDER BY EXTRACT(MONTH FROM FER_DATA), EXTRACT(DAY FROM FER_DATA), FER_DATA';
+  Result.Open;
+end;
+
+function TdmDados.SalvarFeriado(AId: Integer; AData: TDateTime; const ADescricao: string; ARecorrente: Boolean;
+  const AAbrangencia: string): Integer;
+var
+  Qry: TFDQuery;
+  Rec: string;
+begin
+  Result := 0;
+  if ARecorrente then Rec := 'S' else Rec := 'N';
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      if AId <= 0 then
+      begin
+        Qry.SQL.Text := 'INSERT INTO TB_PONTO_FERIADO (FER_DATA, FER_DESCRICAO, FER_RECORRENTE, FER_ABRANGENCIA) ' +
+          'VALUES (:D, :N, :R, :A) RETURNING FER_ID';
+        Qry.ParamByName('D').AsDate := Trunc(AData);
+        Qry.ParamByName('N').AsString := Copy(Trim(ADescricao), 1, 80);
+        Qry.ParamByName('R').AsString := Rec;
+        Qry.ParamByName('A').AsString := AAbrangencia;
+        Qry.Open;
+        if not Qry.IsEmpty then
+          Result := Qry.Fields[0].AsInteger;
+      end
+      else
+      begin
+        Qry.SQL.Text := 'UPDATE TB_PONTO_FERIADO SET FER_DATA = :D, FER_DESCRICAO = :N, FER_RECORRENTE = :R, ' +
+          'FER_ABRANGENCIA = :A WHERE FER_ID = :ID';
+        Qry.ParamByName('D').AsDate := Trunc(AData);
+        Qry.ParamByName('N').AsString := Copy(Trim(ADescricao), 1, 80);
+        Qry.ParamByName('R').AsString := Rec;
+        Qry.ParamByName('A').AsString := AAbrangencia;
+        Qry.ParamByName('ID').AsInteger := AId;
+        Qry.ExecSQL;
+        Result := AId;
+      end;
+    except
+      on E: Exception do
+        FLastError := 'Erro ao salvar o feriado: ' + E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.RemoverFeriado(AId: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    // nacional recorrente: só desativa (senão voltaria no próximo início do sistema)
+    Qry.SQL.Text := 'UPDATE TB_PONTO_FERIADO SET FER_ABRANGENCIA = ''EXCLUIDO'' WHERE FER_ID = :ID ' +
+      'AND COALESCE(FER_ABRANGENCIA, ''NACIONAL'') = ''NACIONAL'' AND COALESCE(FER_RECORRENTE, ''S'') = ''S''';
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.ExecSQL;
+    if Qry.RowsAffected > 0 then
+      Exit(True);
+    Qry.SQL.Text := 'DELETE FROM TB_PONTO_FERIADO WHERE FER_ID = :ID';
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.ExecSQL;
+    Result := Qry.RowsAffected > 0;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.ReativarFeriado(AId: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'UPDATE TB_PONTO_FERIADO SET FER_ABRANGENCIA = ''NACIONAL'' WHERE FER_ID = :ID AND FER_ABRANGENCIA = ''EXCLUIDO''';
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.ExecSQL;
+    Result := Qry.RowsAffected > 0;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.LerAjusteDia(APessoaId: Integer; ADia: TDateTime; out ASemExtra, AFeriado: Boolean): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  ASemExtra := False;
+  AFeriado := False;
+  if not TabelaExiste('TB_PONTO_DIA_AJUSTE') then
+    Exit;
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'SELECT DAJ_SEM_EXTRA, DAJ_FERIADO FROM TB_PONTO_DIA_AJUSTE WHERE DAJ_PESSOA = :P AND DAJ_DATA = :D';
+    Qry.ParamByName('P').AsInteger := APessoaId;
+    Qry.ParamByName('D').AsDate := Trunc(ADia);
+    Qry.Open;
+    if not Qry.IsEmpty then
+    begin
+      ASemExtra := Qry.FieldByName('DAJ_SEM_EXTRA').AsString = 'S';
+      AFeriado := Qry.FieldByName('DAJ_FERIADO').AsString = 'S';
+      Result := True;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.SalvarAjusteDia(APessoaId: Integer; ADia: TDateTime; ASemExtra, AFeriado: Boolean): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  if not TabelaExiste('TB_PONTO_DIA_AJUSTE') then
+    GarantirEstruturaComplementar;
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      if (not ASemExtra) and (not AFeriado) then
+      begin
+        // sem nenhuma opção marcada, o ajuste deixa de existir
+        Qry.SQL.Text := 'DELETE FROM TB_PONTO_DIA_AJUSTE WHERE DAJ_PESSOA = :P AND DAJ_DATA = :D';
+        Qry.ParamByName('P').AsInteger := APessoaId;
+        Qry.ParamByName('D').AsDate := Trunc(ADia);
+        Qry.ExecSQL;
+      end
+      else
+      begin
+        Qry.SQL.Text := 'UPDATE OR INSERT INTO TB_PONTO_DIA_AJUSTE (DAJ_PESSOA, DAJ_DATA, DAJ_SEM_EXTRA, DAJ_FERIADO, ' +
+          'DAJ_USUARIO, DAJ_ALTERADO_EM) VALUES (:P, :D, :SE, :FE, :U, CURRENT_TIMESTAMP) MATCHING (DAJ_PESSOA, DAJ_DATA)';
+        Qry.ParamByName('P').AsInteger := APessoaId;
+        Qry.ParamByName('D').AsDate := Trunc(ADia);
+        if ASemExtra then Qry.ParamByName('SE').AsString := 'S' else Qry.ParamByName('SE').AsString := 'N';
+        if AFeriado then Qry.ParamByName('FE').AsString := 'S' else Qry.ParamByName('FE').AsString := 'N';
+        Qry.ParamByName('U').AsString := UsuarioAuditoria;
+        Qry.ExecSQL;
+      end;
+      Result := True;
+    except
+      on E: Exception do
+        FLastError := 'Erro ao salvar o ajuste do dia: ' + E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.LancarBancoHoras(APessoaId: Integer; AData: TDateTime; AMinutos: Integer;
+  const ATipo, ADescricao: string): Integer;
+var
+  Qry: TFDQuery;
+begin
+  Result := 0;
+  if not TabelaExiste('TB_PONTO_BANCO_HORAS') then
+    GarantirEstruturaComplementar;
+  Qry := TFDQuery.Create(nil);
+  try
+    try
+      Qry.Connection := FDConnection;
+      Qry.SQL.Text := 'INSERT INTO TB_PONTO_BANCO_HORAS (BH_PESSOA, BH_DATA, BH_MINUTOS, BH_TIPO, BH_DESCRICAO) ' +
+        'VALUES (:P, :D, :M, :T, :DESC) RETURNING BH_ID';
+      Qry.ParamByName('P').AsInteger := APessoaId;
+      Qry.ParamByName('D').AsDate := Trunc(AData);
+      Qry.ParamByName('M').AsInteger := AMinutos;
+      Qry.ParamByName('T').AsString := Copy(ATipo, 1, 1);
+      Qry.ParamByName('DESC').AsString := Copy(Trim(ADescricao), 1, 200);
+      Qry.Open;
+      if not Qry.IsEmpty then
+        Result := Qry.Fields[0].AsInteger;
+    except
+      on E: Exception do
+        FLastError := 'Erro ao lançar o saldo: ' + E.Message;
+    end;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.GetLancamentosBancoHoras(APessoaId: Integer): TFDQuery;
+begin
+  Result := TFDQuery.Create(nil);
+  Result.Connection := FDConnection;
+  Result.SQL.Text := 'SELECT BH_ID, BH_DATA, BH_MINUTOS, BH_TIPO, BH_DESCRICAO FROM TB_PONTO_BANCO_HORAS ' +
+    'WHERE BH_PESSOA = :P AND COALESCE(BH_TIPO, ''C'') NOT IN (''C'', ''D'') ORDER BY BH_DATA, BH_ID';
+  Result.ParamByName('P').AsInteger := APessoaId;
+  Result.Open;
+end;
+
+function TdmDados.ExcluirLancamentoBancoHoras(AId: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'DELETE FROM TB_PONTO_BANCO_HORAS WHERE BH_ID = :ID';
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.ExecSQL;
+    Result := Qry.RowsAffected > 0;
+  finally
+    Qry.Free;
+  end;
+end;
+
+function TdmDados.CondMarcacaoValida(const AAlias: string): string;
+begin
+  if CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    Result := 'AND COALESCE(' + AAlias + 'PMA_DESCONSIDERADA, ''N'') = ''N'' '
+  else
+    Result := '';
 end;
 
 procedure TdmDados.ConfigureConnection;
@@ -872,7 +1446,7 @@ begin
     Upd.SQL.Text := 'UPDATE TB_PONTO_MARCACAO SET PMA_TIPO_BATIDA = :TIPO WHERE PMA_ID = :ID';
     Qry.SQL.Text :=
       'SELECT PMA_ID, PMA_DATA_HORA, PMA_TIPO_BATIDA, PMA_ORIGEM FROM TB_PONTO_MARCACAO ' +
-      'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' +
+      'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' + CondMarcacaoValida +
       'ORDER BY PMA_DATA_HORA, PMA_ID';
     Qry.ParamByName('PESSOA').AsInteger := APessoaId;
     Qry.ParamByName('INI').AsDateTime := StartOfTheDay(AData);
@@ -921,7 +1495,8 @@ begin
     Qry.Connection := FDConnection;
     Qry.SQL.Text :=
       'SELECT DISTINCT PMA_PESSOA, CAST(PMA_DATA_HORA AS DATE) AS DIA FROM TB_PONTO_MARCACAO ' +
-      'WHERE PMA_PESSOA > 0 AND (PMA_TIPO_BATIDA IS NULL OR PMA_TIPO_BATIDA NOT IN (''E'', ''S''))';
+      'WHERE PMA_PESSOA > 0 AND (PMA_TIPO_BATIDA IS NULL OR PMA_TIPO_BATIDA NOT IN (''E'', ''S'')) ' +
+      CondMarcacaoValida;
     Qry.Open;
     while not Qry.Eof do
     begin
@@ -971,6 +1546,20 @@ begin
   end;
 end;
 
+// 'HH:MM' gravado em texto -> minutos desde 00:00 (-1 quando vazio ou inválido)
+function HoraTxtMin(const S: string): Integer;
+var
+  P, H, M: Integer;
+begin
+  Result := -1;
+  P := Pos(':', Trim(S));
+  if P < 2 then
+    Exit;
+  if TryStrToInt(Copy(Trim(S), 1, P - 1), H) and TryStrToInt(Copy(Trim(S), P + 1, 2), M) and
+     (H >= 0) and (H <= 23) and (M >= 0) and (M <= 59) then
+    Result := H * 60 + M;
+end;
+
 function TdmDados.GetSlotsPrevistos(APessoaId: Integer; AData: TDateTime): TArray<Integer>;
 var
   Qry: TFDQuery;
@@ -996,6 +1585,7 @@ var
 
 var
   E1, S1, E2, S2: Integer;
+  QDia: TFDQuery;
 begin
   SetLength(Result, 0);
   if not IsConectado then
@@ -1012,6 +1602,38 @@ begin
       Qry.Open;
       if Qry.IsEmpty then
         Exit;
+
+      // Jornada dia a dia (cadastro de horários): prevalece sobre os campos gerais.
+      // Dia marcado como folga não tem horários previstos.
+      try
+        QDia := TFDQuery.Create(nil);
+        try
+          QDia.Connection := FDConnection;
+          QDia.SQL.Text := 'SELECT HDI_ENTRADA_1, HDI_SAIDA_1, HDI_ENTRADA_2, HDI_SAIDA_2, HDI_FOLGA ' +
+            'FROM TB_PONTO_HORARIO_DIA WHERE HDI_HORARIO = :H AND HDI_DIA_SEMANA = :D';
+          QDia.ParamByName('H').AsInteger := Qry.FieldByName('HOR_ID').AsInteger;
+          QDia.ParamByName('D').AsInteger := DayOfTheWeek(AData);
+          QDia.Open;
+          if not QDia.IsEmpty then
+          begin
+            if QDia.FieldByName('HDI_FOLGA').AsString <> 'S' then
+            begin
+              Add(HoraTxtMin(QDia.FieldByName('HDI_ENTRADA_1').AsString));
+              Add(HoraTxtMin(QDia.FieldByName('HDI_SAIDA_1').AsString));
+              Add(HoraTxtMin(QDia.FieldByName('HDI_ENTRADA_2').AsString));
+              Add(HoraTxtMin(QDia.FieldByName('HDI_SAIDA_2').AsString));
+            end;
+            Exit;
+          end;
+        finally
+          QDia.Free;
+        end;
+      except
+        on E: Exception do
+          if Length(Result) > 0 then
+            raise;   // erro depois de montar os horários: segue para o tratamento externo
+        // base sem a tabela de jornada por dia: usa os campos gerais
+      end;
 
       case DayOfWeek(AData) of
         1: Exit; // Domingo: sem jornada prevista
@@ -1103,7 +1725,7 @@ begin
 
       Qry.SQL.Text :=
         'SELECT PMA_DATA_HORA FROM TB_PONTO_MARCACAO ' +
-        'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' +
+        'WHERE PMA_PESSOA = :PESSOA AND PMA_DATA_HORA BETWEEN :INI AND :FIM ' + CondMarcacaoValida +
         'ORDER BY PMA_DATA_HORA';
       Qry.ParamByName('PESSOA').AsInteger := APessoaId;
       Qry.ParamByName('INI').AsDateTime := StartOfTheDay(ADataHora);
@@ -1368,10 +1990,17 @@ function TdmDados.GetMarcacoes(ADataIni, ADataFim: TDateTime; ARelogioId, APesso
   AApenasValidas: Boolean): TFDQuery;
 var
   Qry: TFDQuery;
-  SQL: string;
+  SQL, ColunasDesconsiderada: string;
 begin
   if not IsConectado then
     Conectar;
+
+  if CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    ColunasDesconsiderada :=
+      'COALESCE(M.PMA_DESCONSIDERADA, ''N'') AS PMA_DESCONSIDERADA, M.PMA_MOTIVO_DESCONSIDERACAO, '
+  else
+    ColunasDesconsiderada :=
+      '''N'' AS PMA_DESCONSIDERADA, CAST(NULL AS VARCHAR(250)) AS PMA_MOTIVO_DESCONSIDERACAO, ';
 
   Qry := TFDQuery.Create(nil);
   Qry.Connection := FDConnection;
@@ -1379,6 +2008,7 @@ begin
   SQL := 'SELECT M.PMA_ID, M.PMA_DATA_HORA, M.PMA_EVENTO, M.PMA_CONTROLID_LOG_ID, ' +
          'M.PMA_NSR, M.PMA_PIS, M.PMA_CPF, M.PMA_TIPO_BATIDA, M.PMA_TIPO_IDENTIFICACAO, ' +
          'M.PMA_ORIGEM, M.PMA_EXPORTADO, ' +
+         ColunasDesconsiderada +
          'R.PRE_NOME AS RELOGIO_NOME, ' +
          'COALESCE(P.PES_RSOCIAL_NOME, ''NÃO IDENTIFICADO'') AS PESSOA_NOME ' +
          'FROM TB_PONTO_MARCACAO M ' +
@@ -1412,59 +2042,8 @@ begin
   Result := Qry;
 end;
 
-function TdmDados.ExcluirMarcacao(AMarcacaoId: Integer): Boolean;
-var
-  Qry: TFDQuery;
-begin
-  Result := False;
-  if not IsConectado then
-    Conectar;
-
-  Qry := TFDQuery.Create(nil);
-  try
-    Qry.Connection := FDConnection;
-    Qry.SQL.Text := 'DELETE FROM TB_PONTO_MARCACAO WHERE PMA_ID = :ID';
-    Qry.ParamByName('ID').AsInteger := AMarcacaoId;
-    Qry.ExecSQL;
-    Result := (Qry.RowsAffected > 0);
-  finally
-    Qry.Free;
-  end;
-end;
-
-function TdmDados.AtualizarMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida: string;
-  const AMotivo: string): Boolean;
-var
-  Qry: TFDQuery;
-begin
-  Result := False;
-  if not IsConectado then
-    Conectar;
-
-  Qry := TFDQuery.Create(nil);
-  try
-    Qry.Connection := FDConnection;
-    Qry.SQL.Text :=
-      'UPDATE TB_PONTO_MARCACAO SET ' +
-      '  PMA_DATA_HORA = :DH, ' +
-      '  PMA_TIPO_BATIDA = :TIPO, ' +
-      '  PMA_ORIGEM = ''M'', ' +
-      '  PMA_MOTIVO_AJUSTE = :MOTIVO, ' +
-      '  PMA_DATA_ALTERACAO = CURRENT_TIMESTAMP ' +
-      'WHERE PMA_ID = :ID';
-    Qry.ParamByName('DH').AsDateTime := ADataHora;
-    Qry.ParamByName('TIPO').AsString := UpperCase(Trim(ATipoBatida));
-    Qry.ParamByName('MOTIVO').AsString := Copy(Trim(AMotivo), 1, 250);
-    Qry.ParamByName('ID').AsInteger := AId;
-    Qry.ExecSQL;
-    Result := (Qry.RowsAffected > 0);
-  finally
-    Qry.Free;
-  end;
-end;
-
 function TdmDados.InserirMarcacaoManual(APessoaId, ARelogioId: Integer; ADataHora: TDateTime;
-  const ATipoBatida: string): Integer;
+  const ATipoBatida: string; const AMotivo: string): Integer;
 var
   Qry: TFDQuery;
 begin
@@ -1477,9 +2056,10 @@ begin
     Qry.Connection := FDConnection;
     Qry.SQL.Text :=
       'INSERT INTO TB_PONTO_MARCACAO (' +
-      '  PMA_PESSOA, PMA_RELOGIO, PMA_DATA_HORA, PMA_TIPO_BATIDA, PMA_ORIGEM, PMA_EVENTO, PMA_EXPORTADO' +
+      '  PMA_PESSOA, PMA_RELOGIO, PMA_DATA_HORA, PMA_TIPO_BATIDA, PMA_ORIGEM, PMA_EVENTO, PMA_EXPORTADO, ' +
+      '  PMA_MOTIVO_AJUSTE, PMA_DATA_ALTERACAO, PMA_USUARIO_ALTERACAO' +
       ') VALUES (' +
-      '  :PESSOA, :RELOGIO, :DH, :TIPO, ''M'', 7, ''N''' +
+      '  :PESSOA, :RELOGIO, :DH, :TIPO, ''M'', 7, ''N'', :MOTIVO, CURRENT_TIMESTAMP, :USU' +
       ') RETURNING PMA_ID';
     Qry.ParamByName('PESSOA').AsInteger := APessoaId;
     if ARelogioId > 0 then
@@ -1488,11 +2068,137 @@ begin
       Qry.ParamByName('RELOGIO').Clear;
     Qry.ParamByName('DH').AsDateTime := ADataHora;
     Qry.ParamByName('TIPO').AsString := UpperCase(Trim(ATipoBatida));
+    Qry.ParamByName('MOTIVO').AsString := Copy(Trim(AMotivo), 1, 250);
+    Qry.ParamByName('USU').AsString := UsuarioAuditoria;
     Qry.Open;
     if not Qry.IsEmpty then
       Result := Qry.Fields[0].AsInteger;
   finally
     Qry.Free;
+  end;
+end;
+
+// Depois de desconsiderar/restaurar uma batida, a sequência Entrada/Saída das demais do dia muda
+procedure TdmDados.ReclassificarDaMarcacao(AMarcacaoId: Integer);
+var
+  Qry: TFDQuery;
+  Pessoa: Integer;
+  Dia: TDateTime;
+begin
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'SELECT PMA_PESSOA, PMA_DATA_HORA FROM TB_PONTO_MARCACAO WHERE PMA_ID = :ID';
+    Qry.ParamByName('ID').AsInteger := AMarcacaoId;
+    Qry.Open;
+    if Qry.IsEmpty then
+      Exit;
+    Pessoa := Qry.FieldByName('PMA_PESSOA').AsInteger;
+    Dia := Qry.FieldByName('PMA_DATA_HORA').AsDateTime;
+  finally
+    Qry.Free;
+  end;
+  RecalcularTiposDia(Pessoa, Dia);
+end;
+
+function TdmDados.DesconsiderarMarcacao(AId: Integer; const AMotivo: string): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  if not IsConectado then
+    Conectar;
+  if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    GarantirEstruturaComplementar;   // cria as colunas da Portaria 671 se faltarem
+  if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    Exit;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'UPDATE TB_PONTO_MARCACAO SET PMA_DESCONSIDERADA = ''S'', PMA_MOTIVO_DESCONSIDERACAO = :MOTIVO, ' +
+      'PMA_DATA_DESCONSIDERACAO = CURRENT_TIMESTAMP, PMA_USUARIO_ALTERACAO = :USU WHERE PMA_ID = :ID';
+    Qry.ParamByName('USU').AsString := UsuarioAuditoria;
+    Qry.ParamByName('MOTIVO').AsString := Copy(Trim(AMotivo), 1, 250);
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.ExecSQL;
+    Result := (Qry.RowsAffected > 0);
+  finally
+    Qry.Free;
+  end;
+  if Result then
+    ReclassificarDaMarcacao(AId);
+end;
+
+function TdmDados.RestaurarMarcacao(AId: Integer): Boolean;
+var
+  Qry: TFDQuery;
+begin
+  Result := False;
+  if not IsConectado then
+    Conectar;
+  if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    GarantirEstruturaComplementar;   // cria as colunas da Portaria 671 se faltarem
+  if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    Exit;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'UPDATE TB_PONTO_MARCACAO SET PMA_DESCONSIDERADA = ''N'', PMA_MOTIVO_DESCONSIDERACAO = NULL, ' +
+      'PMA_DATA_DESCONSIDERACAO = NULL, PMA_USUARIO_ALTERACAO = :USU WHERE PMA_ID = :ID';
+    Qry.ParamByName('USU').AsString := UsuarioAuditoria;
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.ExecSQL;
+    Result := (Qry.RowsAffected > 0);
+  finally
+    Qry.Free;
+  end;
+  if Result then
+    ReclassificarDaMarcacao(AId);
+end;
+
+function TdmDados.CorrigirMarcacao(AId: Integer; ADataHora: TDateTime; const ATipoBatida, AMotivo: string): Integer;
+var
+  Qry: TFDQuery;
+  PessoaId, RelogioId: Integer;
+begin
+  Result := 0;
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Qry.SQL.Text := 'SELECT PMA_PESSOA, COALESCE(PMA_RELOGIO, 0) AS PMA_RELOGIO FROM TB_PONTO_MARCACAO WHERE PMA_ID = :ID';
+    Qry.ParamByName('ID').AsInteger := AId;
+    Qry.Open;
+    if Qry.IsEmpty then
+      Exit;
+    PessoaId := Qry.FieldByName('PMA_PESSOA').AsInteger;
+    RelogioId := Qry.FieldByName('PMA_RELOGIO').AsInteger;
+  finally
+    Qry.Free;
+  end;
+
+  // A original nunca é sobrescrita: a nova batida e a desconsideração da antiga valem juntas ou nenhuma\r
+  if not CampoExiste('TB_PONTO_MARCACAO', 'PMA_DESCONSIDERADA') then
+    GarantirEstruturaComplementar;
+  FDConnection.StartTransaction;
+  try
+    Result := InserirMarcacaoManual(PessoaId, RelogioId, ADataHora, ATipoBatida, AMotivo);
+    if (Result > 0) and (not DesconsiderarMarcacao(AId, Format('Corrigida pela batida #%d: %s', [Result, Trim(AMotivo)]))) then
+      Result := 0;
+    if Result > 0 then
+      FDConnection.Commit
+    else
+      FDConnection.Rollback;
+  except
+    FDConnection.Rollback;
+    Result := 0;
+    raise;
   end;
 end;
 
@@ -1510,7 +2216,7 @@ begin
     Qry.Connection := FDConnection;
     Qry.SQL.Text :=
       'SELECT COUNT(*) AS TOTAL FROM TB_PONTO_MARCACAO ' +
-      'WHERE PMA_DATA_HORA >= :HOJE';
+      'WHERE PMA_DATA_HORA >= :HOJE ' + CondMarcacaoValida;
     Qry.ParamByName('HOJE').AsDateTime := StartOfTheDay(Date);
     Qry.Open;
     if not Qry.IsEmpty then
@@ -1858,8 +2564,14 @@ end;
 function TdmDados.CampoExiste(const ANomeTabela, ANomeCampo: string): Boolean;
 var
   Qry: TFDQuery;
+  Chave: string;
 begin
   Result := False;
+  Chave := UpperCase(Trim(ANomeTabela)) + '.' + UpperCase(Trim(ANomeCampo));
+  if FCacheCampos = nil then
+    FCacheCampos := TDictionary<string, Boolean>.Create;
+  if FCacheCampos.ContainsKey(Chave) then
+    Exit(True);
   Qry := TFDQuery.Create(nil);
   try
     Qry.Connection := FDConnection;
@@ -1869,6 +2581,9 @@ begin
     Qry.ParamByName('COL').AsString := ANomeCampo;
     Qry.Open;
     Result := not Qry.IsEmpty;
+    // só guarda o que existe: um campo ausente pode ser criado depois pela migração
+    if Result then
+      FCacheCampos.AddOrSetValue(Chave, True);
   finally
     Qry.Free;
   end;
@@ -2405,6 +3120,9 @@ begin
 
   if not GeneratorExiste('GEN_PONTO_JUSTIFICATIVA') then
     ExecutarComandoDDL('CREATE GENERATOR GEN_PONTO_JUSTIFICATIVA');
+
+  // Feriados, banco de horas e ajuste do dia (e os feriados nacionais fixos que estiverem faltando)
+  GarantirEstruturaComplementar;
 
   // Auto-incremento das chaves: sem trigger os INSERTs sem ID falham (validation error ... null)
   GarantirAutoIncremento('TB_PONTO_RELOGIO', 'PRE_ID', 'GEN_PONTO_RELOGIO');

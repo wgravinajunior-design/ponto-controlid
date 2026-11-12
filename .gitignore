@@ -46,3 +46,6 @@ uServidorOnline.pas
 sk4d.dll
 Instaladores/*
 !Instaladores/instalar_hamster.bat
+
+# Pacotes de instalacao e backups
+*.rar

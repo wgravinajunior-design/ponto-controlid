@@ -44,7 +44,7 @@ class ResumoEspelho {
   int totalPrevistoMin = 0, totalTrabalhadoMin = 0, totalExtrasMin = 0, totalFaltasMin = 0, saldoTotalMin = 0;
   int totalExtras50Min = 0, totalExtras100Min = 0, totalNoturnoMin = 0, totalAtrasosMin = 0, totalAbonadoMin = 0;
   int totalIntervaloSuprimidoMin = 0, totalInterjornadaMin = 0, dsrDescontados = 0, diasExtraAcima2h = 0;
-  int totalFeriadosTrabalhados = 0;
+  int totalFeriadosTrabalhados = 0, totalFeriados = 0, feriadosDescontados = 0;
   int totalExtrasFaixa2Min = 0; // extras em dias normais acima da 1ª faixa (convenção coletiva)
   int diasAfastado = 0;
   // Banco de horas: créditos (extras 50%) e débitos (atrasos) do período não vão para a folha
@@ -52,11 +52,13 @@ class ResumoEspelho {
   int bancoCreditoMin = 0, bancoDebitoMin = 0, bancoSaldoAnteriorMin = 0;
   int get bancoSaldoPeriodoMin => bancoCreditoMin - bancoDebitoMin;
   int get bancoSaldoFinalMin => bancoSaldoAnteriorMin + bancoSaldoPeriodoMin + creditoHorasMin;
+  // Lançamentos manuais anteriores ao período (ex.: saldo vindo de outro sistema): somam sempre no saldo
+  int saldoAnteriorMin = 0;
   // Créditos/débitos de horas lançados manualmente com data no período (saldo de sistema anterior, ajustes...)
   int creditoHorasMin = 0;
 
   /// Saldo final exibido: banco de horas acumulado ou saldo do período mais os créditos lançados nele.
-  int get saldoFinalMin => usaBancoHoras ? bancoSaldoFinalMin : saldoTotalMin + creditoHorasMin;
+  int get saldoFinalMin => usaBancoHoras ? bancoSaldoFinalMin : saldoTotalMin + creditoHorasMin + saldoAnteriorMin;
 
   /// Extras 50% e atrasos que vão para a folha (fora do banco de horas).
   int get extras50FolhaMin => usaBancoHoras ? 0 : totalExtras50Min;
@@ -155,6 +157,8 @@ class EspelhoPonto {
       ..writeln(card('Intervalo suprimido', minutosParaHora(r.totalIntervaloSuprimidoMin)))
       ..writeln(card('Interjornada < 11h', minutosParaHora(r.totalInterjornadaMin)))
       ..writeln(card('DSR descontados', '${r.dsrDescontados}', r.dsrDescontados > 0 ? 'val-neg' : ''))
+      ..writeln(card('Feriados (não descontados do previsto)', '${r.totalFeriados}'))
+      ..writeln(card('Feriados descontados', '${r.feriadosDescontados}', r.feriadosDescontados > 0 ? 'val-neg' : ''))
       ..writeln(card('Abonado', minutosParaHora(r.totalAbonadoMin)))
       ..writeln(r.creditoHorasMin == 0
           ? ''
@@ -293,6 +297,10 @@ class PontoCalculoService {
       if (d == null) continue;
       final m = asInt(l['BH_MINUTOS']);
       if (soData(d).isBefore(ini)) {
+        // Com banco de horas todo o histórico forma o saldo anterior; sem banco, só os lançamentos manuais
+        // (saldo de outro sistema, ajustes), pois extras e atrasos dos meses fechados já foram pagos.
+        final manual = !const ['C', 'D'].contains(asStr(l['BH_TIPO']));
+        if (j.bancoHoras || manual) r.saldoAnteriorMin += m;
         if (j.bancoHoras) r.bancoSaldoAnteriorMin += m;
       } else if (!const ['C', 'D'].contains(asStr(l['BH_TIPO']))) {
         r.creditoHorasMin += m;
@@ -572,6 +580,24 @@ class PontoCalculoService {
         }
       }
     }
+
+    // 5.1 Feriado: não é descontado do total (a carga prevista do dia já é zero e a hora é remunerada),
+    // mas, pela mesma regra do art. 6º da Lei 605/49, perde a remuneração quem faltou sem justificativa
+    // na semana (segunda a sábado) em que ele cai.
+    if (!j.e12x36) {
+      for (final d in esp.dias.where((d) => d.tipoDia == TipoDia.feriado && !d.foraContrato)) {
+        final iniSemana = DateTime(d.data.year, d.data.month, d.data.day - (d.data.weekday - 1));
+        final fimSemana = DateTime(iniSemana.year, iniSemana.month, iniSemana.day + 5);
+        final semana = esp.dias.where((x) => !x.data.isBefore(iniSemana) && !x.data.isAfter(fimSemana));
+        if (semana.any((x) => x.faltaDiaInteiro)) {
+          d
+            ..dsrDescontado = true
+            ..alertas.add('Feriado descontado (falta na semana)');
+          r.feriadosDescontados++;
+        }
+      }
+    }
+    r.totalFeriados = esp.dias.where((d) => d.tipoDia == TipoDia.feriado && !d.foraContrato).length;
 
     // 6. Banco de horas: extras 50% viram crédito e atrasos viram débito (não vão para a folha)
     if (j.bancoHoras) {

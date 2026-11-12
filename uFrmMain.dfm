@@ -2776,7 +2776,7 @@ object frmMain: TfrmMain
           Top = 18
           Width = 145
           Height = 36
-          Caption = 'Apurar Ponto'
+          Caption = 'Recalcular'
           TabOrder = 3
           OnClick = btnCalcularEspelhoClick
         end
@@ -2803,9 +2803,29 @@ object frmMain: TfrmMain
           Top = 18
           Width = 190
           Height = 36
-          Caption = 'Corrigir / Incluir Batida'
+          Caption = 'Corrigir'
+          Hint = 'Corrige as batidas do dia selecionado (ou d'#234' duplo clique no dia). F8: pr'#243'xima pend'#234'ncia'
+          ShowHint = True
           TabOrder = 6
           OnClick = btnCorrigirBatidaEspelhoClick
+        end
+        object btnIncluirBatidaEspelho: TButton
+          Left = 1280
+          Top = 18
+          Width = 110
+          Height = 36
+          Caption = 'Incluir'
+          TabOrder = 7
+          OnClick = btnIncluirBatidaEspelhoClick
+        end
+        object btnSaldoAnterior: TButton
+          Left = 1410
+          Top = 18
+          Width = 150
+          Height = 36
+          Caption = 'Saldo anterior'
+          TabOrder = 8
+          OnClick = btnSaldoAnteriorClick
         end
       end
       object grdEspelho: TStringGrid
@@ -2815,13 +2835,15 @@ object frmMain: TfrmMain
         Height = 438
         Align = alClient
         BorderStyle = bsNone
-        ColCount = 13
+        ColCount = 15
         FixedCols = 0
         RowCount = 2
         DefaultDrawing = False
         Options = [goFixedVertLine, goFixedHorzLine, goVertLine, goHorzLine, goRangeSelect, goRowSelect]
         TabOrder = 1
+        OnDblClick = grdEspelhoDblClick
         OnDrawCell = grdEspelhoDrawCell
+        OnKeyDown = grdEspelhoKeyDown
         ExplicitHeight = 445
       end
       object pnlEspelhoResumo: TPanel
