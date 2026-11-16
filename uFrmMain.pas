@@ -413,6 +413,7 @@ type
     FSelectedColabId: Integer;
     FSelectedHorarioId: Integer;
     FUltimoEspelho: TEspelhoPonto;
+    FRecalcPendente: Boolean;
     FLblEspelhoDetalhe: TLabel;
     chkVerDesconsideradas: TCheckBox;
     FPnlHorDias: TPanel;                          // grade semanal do cadastro de jornada
@@ -472,6 +473,8 @@ type
     procedure skRelatorioESClick(Sender: TObject);
     procedure AbrirTerminalBiometrico;
     procedure TerminalBatidaRegistrada;
+    procedure PerguntarRecalcular;
+    procedure AppAtivou(Sender: TObject);
     function LeitorLivreParaUso: Boolean;
 
     procedure ChecarAtualizacaoSistemaAsync;
@@ -761,6 +764,7 @@ procedure TfrmMain.FormShow(Sender: TObject);
 var
   Err: string;
 begin
+  Screen.OnActiveFormChange := AppAtivou;
   WindowState := wsMaximized;
   ShowWindow(Handle, SW_MAXIMIZE);
   ArredondarControles;
@@ -4967,7 +4971,7 @@ begin
   if not DiaEspelhoSelecionado(Dia) then
     Dia := Date;
   if IncluirBatidaEspelho(Dia) then
-    btnCalcularEspelhoClick(nil);
+    PerguntarRecalcular;
 end;
 
 // Corrige uma batida existente (Portaria 671: a original fica desconsiderada e uma nova é gravada)
@@ -5328,7 +5332,7 @@ begin
         else
         begin
           Item := Lst.Items.Add;
-          Item.Caption := 'Nenhuma batida neste dia. Use "Incluir".';
+          Item.Caption := 'Nenhuma batida neste dia. Use "Horários do dia".';
         end;
 
         // Ajustes do dia: valem para este colaborador nesta data
@@ -5346,7 +5350,7 @@ begin
 
         NovoBotao('✏️ Corrigir', 12, mrOk);
         NovoBotao('🚫 Desconsiderar / Restaurar', 132, mrIgnore).Width := 200;
-        NovoBotao('➕ Incluir', 340, mrRetry);
+        NovoBotao('🕒 Horários do dia', 340, mrRetry).Width := 160;
         NovoBotao('Fechar', 516, mrCancel);
 
         Sel := -1;
@@ -5449,7 +5453,7 @@ begin
   end;
 
   if Alterou then
-    btnCalcularEspelhoClick(nil);
+    PerguntarRecalcular;
 end;
 
 // Inclusão de batida manual; a data sugerida é a do dia selecionado
@@ -5457,9 +5461,14 @@ function TfrmMain.IncluirBatidaEspelho(ADia: TDateTime): Boolean;
 var
   Idx, ColabId: Integer;
   Prompts, Values: array of string;
-  TipoStr, MotivoStr: string;
-  DataHoraBat: TDateTime;
-  NovoId: Integer;
+  TipoStr, MotivoStr, HoraTxt: string;
+  NovoId, I, J, K, NSlots: Integer;
+  ExistTipo: array of string;
+  ExistId: array of Integer;
+  ExistDh, NovaHora: array of TDateTime;
+  Preenchido: array of Boolean;
+  H: TDateTime;
+  Qry: TDataSet;
 begin
   Result := False;
   Idx := cmbEspelhoColab.ItemIndex;
@@ -5476,44 +5485,145 @@ begin
     Exit;
   end;
 
-  SetLength(Prompts, 4);
-  SetLength(Values, 4);
+  // Batidas válidas do dia, em ordem cronológica (a consulta vem decrescente)
+  SetLength(ExistId, 0);
+  SetLength(ExistDh, 0);
+  Qry := dmDados.GetMarcacoes(ADia, ADia, 0, ColabId, True);
+  try
+    while not Qry.Eof do
+    begin
+      SetLength(ExistId, Length(ExistId) + 1);
+      SetLength(ExistDh, Length(ExistDh) + 1);
+      SetLength(ExistTipo, Length(ExistTipo) + 1);
+      for I := High(ExistId) downto 1 do
+      begin
+        ExistId[I] := ExistId[I - 1];
+        ExistDh[I] := ExistDh[I - 1];
+        ExistTipo[I] := ExistTipo[I - 1];
+      end;
+      ExistId[0] := Qry.FieldByName('PMA_ID').AsInteger;
+      ExistDh[0] := Qry.FieldByName('PMA_DATA_HORA').AsDateTime;
+      ExistTipo[0] := UpperCase(Trim(Qry.FieldByName('PMA_TIPO_BATIDA').AsString));
+      Qry.Next;
+    end;
+  finally
+    Qry.Free;
+  end;
 
-  Prompts[0] := 'Data da Batida (DD/MM/AAAA):';
-  Values[0] := FormatDateTime('dd/mm/yyyy', ADia);
+  // Um campo por batida: o que for alterado é corrigido, o que ficar vazio é desconsiderado
+  NSlots := 6;
+  if Length(ExistId) > NSlots then
+    NSlots := Length(ExistId) + (Length(ExistId) mod 2);
+  SetLength(Prompts, NSlots + 1);
+  SetLength(Values, NSlots + 1);
+  for I := 0 to NSlots - 1 do
+  begin
+    Prompts[I] := Format('%dª %s (HH:MM - deixe vazio para remover):',
+      [I div 2 + 1, SeTexto(Odd(I), 'Saída', 'Entrada')]);
+    if I < Length(ExistDh) then
+      Values[I] := FormatDateTime('hh:nn', ExistDh[I])
+    else
+      Values[I] := '';
+  end;
+  Prompts[NSlots] := 'Motivo do ajuste (Portaria 671):';
+  Values[NSlots] := 'Esquecimento de registro';
 
-  Prompts[1] := 'Hora da Batida (HH:MM:SS):';
-  Values[1] := '08:00:00';
-
-  Prompts[2] := 'Tipo de Batida (E = Entrada, S = Saída):';
-  Values[2] := 'E';
-
-  Prompts[3] := 'Motivo da Inclusão/Correção (Portaria 671):';
-  Values[3] := 'Esquecimento de registro';
-
-  if not DialogoCampos('Incluir batida', cmbEspelhoColab.Text, Prompts, Values, $00137333) then
+  if not DialogoCampos('Horários do dia ' + FormatDateTime('dd/mm/yyyy', ADia), cmbEspelhoColab.Text,
+       Prompts, Values, $00137333) then
     Exit;
 
-  MotivoStr := Trim(Values[3]);
-  if not ValidarEntradaBatida(Values[0], Values[1], Values[2], DataHoraBat, TipoStr) then
-    Exit;
+  MotivoStr := Trim(Values[NSlots]);
   if Length(MotivoStr) < 5 then
   begin
-    ShowMessage('Informe o motivo da inclusão (mínimo 5 caracteres).');
+    ShowMessage('Informe o motivo do ajuste (mínimo 5 caracteres).');
     Exit;
   end;
 
+  // Valida todos os horários antes de gravar qualquer coisa; ordena e tira os repetidos,
+  // assim a sequência é sempre Entrada, Saída, Entrada, Saída...
+  SetLength(NovaHora, 0);
+  for I := 0 to NSlots - 1 do
+  begin
+    HoraTxt := Trim(Values[I]);
+    if HoraTxt = '' then
+      Continue;
+    if (Length(HoraTxt) = 4) and (Pos(':', HoraTxt) = 0) then
+      HoraTxt := Copy(HoraTxt, 1, 2) + ':' + Copy(HoraTxt, 3, 2);
+    if not TryStrToTime(HoraTxt, H) then
+    begin
+      ShowMessage(Format('Horário inválido em "%s": %s', [Copy(Prompts[I], 1, Pos(' (', Prompts[I]) - 1), Values[I]]));
+      Exit;
+    end;
+    H := Trunc(ADia) + EncodeTime(HourOf(H), MinuteOf(H), 0, 0);
+    // inserção ordenada, ignorando horário repetido
+    J := 0;
+    while (J < Length(NovaHora)) and (NovaHora[J] < H - (1 / 86400)) do
+      Inc(J);
+    if (J < Length(NovaHora)) and (Abs(NovaHora[J] - H) < (1 / 86400)) then
+      Continue;
+    SetLength(NovaHora, Length(NovaHora) + 1);
+    for K := High(NovaHora) downto J + 1 do
+      NovaHora[K] := NovaHora[K - 1];
+    NovaHora[J] := H;
+  end;
+
+  if Odd(Length(NovaHora)) then
+    if MessageDlg('Ficou um número ímpar de batidas (a última entrada fica sem saída). Gravar assim mesmo?',
+         mtWarning, [mbYes, mbNo], 0) <> mrYes then
+      Exit;
+
+  // Posição I: I-ésimo horário ordenado; as batidas antigas que sobrarem são desconsideradas
+  K := Length(NovaHora);
+  NSlots := K;
+  if Length(ExistId) > NSlots then
+    NSlots := Length(ExistId);
+  SetLength(Preenchido, NSlots);
+  SetLength(NovaHora, NSlots);
+  for I := 0 to NSlots - 1 do
+    Preenchido[I] := I < K;
+
   Screen.Cursor := crHourGlass;
   try
-    NovoId := dmDados.InserirMarcacaoManual(ColabId, ObterRelogioAtivoId, DataHoraBat, TipoStr, MotivoStr);
-    if NovoId > 0 then
+    for I := 0 to NSlots - 1 do
     begin
-      LogMessage(Format('➕ Batida incluída no espelho ID %d para %s (%s) - %s',
-        [NovoId, FormatDateTime('dd/mm/yyyy hh:nn:ss', DataHoraBat), TipoStr, cmbEspelhoColab.Text]));
-      Result := True;
-    end
-    else
-      ShowMessage('Erro ao registrar batida no banco de dados.');
+      TipoStr := SeTexto(Odd(I), 'S', 'E');
+      if I < Length(ExistId) then
+      begin
+        if not Preenchido[I] then
+        begin
+          if dmDados.DesconsiderarMarcacao(ExistId[I], MotivoStr) then
+          begin
+            LogMessage(Format('🚫 Batida #%d desconsiderada - %s. Motivo: %s', [ExistId[I], cmbEspelhoColab.Text, MotivoStr]));
+            Result := True;
+          end;
+        end
+        else if (FormatDateTime('hh:nn', NovaHora[I]) <> FormatDateTime('hh:nn', ExistDh[I])) or
+                (ExistTipo[I] <> TipoStr) then
+        begin
+          NovoId := dmDados.CorrigirMarcacao(ExistId[I], NovaHora[I], TipoStr, MotivoStr);
+          if NovoId > 0 then
+          begin
+            LogMessage(Format('✏️ Batida #%d corrigida pela #%d em %s (%s) - %s [Motivo: %s]',
+              [ExistId[I], NovoId, FormatDateTime('dd/mm/yyyy hh:nn', NovaHora[I]), TipoStr, cmbEspelhoColab.Text, MotivoStr]));
+            Result := True;
+          end
+          else
+            ShowMessage('Não foi possível corrigir a batida das ' + FormatDateTime('hh:nn', ExistDh[I]) + '.');
+        end;
+      end
+      else if Preenchido[I] then
+      begin
+        NovoId := dmDados.InserirMarcacaoManual(ColabId, ObterRelogioAtivoId, NovaHora[I], TipoStr, MotivoStr);
+        if NovoId > 0 then
+        begin
+          LogMessage(Format('➕ Batida incluída no espelho ID %d para %s (%s) - %s',
+            [NovoId, FormatDateTime('dd/mm/yyyy hh:nn', NovaHora[I]), TipoStr, cmbEspelhoColab.Text]));
+          Result := True;
+        end
+        else
+          ShowMessage('Erro ao registrar a batida das ' + FormatDateTime('hh:nn', NovaHora[I]) + '.');
+      end;
+    end;
   finally
     Screen.Cursor := crDefault;
   end;
@@ -5916,7 +6026,7 @@ begin
   skLancarJustificativa := CriarBtn(btnLancarJustificativa, '📝 Lançar Ocorrência', sbkPurple, 8, 11, 16);
   skExportarEspelhoHTML := CriarBtn(btnExportarEspelhoHTML, '🖨️ Imprimir / Relatório', sbkSuccess, 8, 11, 16);
   skCorrigirBatidaEspelho := CriarBtn(btnCorrigirBatidaEspelho, '✏️ Corrigir', sbkWarning, 8, 11, 16);
-  skIncluirBatidaEspelho := CriarBtn(btnIncluirBatidaEspelho, '➕ Incluir', sbkSuccess, 8, 11, 16);
+  skIncluirBatidaEspelho := CriarBtn(btnIncluirBatidaEspelho, '🕒 Horários', sbkSuccess, 8, 11, 16);
   skSaldoAnterior := CriarBtn(btnSaldoAnterior, '🏦 Saldo anterior', sbkTeal, 8, 11, 16);
   skAfastamentos := CriarBtn(FBtnAfastamentos, '🏖️ Afastamentos', sbkPurple, 8, 11, 16);
   skFeriados := CriarBtn(FBtnFeriados, '📅 Feriados', sbkPrimary, 8, 11, 16);
@@ -6667,8 +6777,27 @@ begin
   AbrirTerminalPonto(LogMessage, TerminalBatidaRegistrada);
 end;
 
+// Toda alteração de batida pergunta se quer recalcular as horas do espelho
+procedure TfrmMain.PerguntarRecalcular;
+begin
+  FRecalcPendente := False;
+  if MessageDlg('As batidas foram alteradas.'#13#10'Deseja recalcular as horas agora?',
+       mtConfirmation, [mbYes, mbNo], 0) = mrYes then
+    btnCalcularEspelhoClick(nil);
+end;
+
+// Batida vinda do Terminal: a pergunta espera o usuário voltar para a janela principal (não trava o terminal)
+procedure TfrmMain.AppAtivou(Sender: TObject);
+begin
+  if FRecalcPendente and Assigned(FUltimoEspelho) and (pgcMain.ActivePage = tabEspelho) and
+     (Screen.ActiveForm = Self) then
+    PerguntarRecalcular;
+end;
+
 procedure TfrmMain.TerminalBatidaRegistrada;
 begin
+  if Assigned(FUltimoEspelho) and (pgcMain.ActivePage = tabEspelho) then
+    FRecalcPendente := True;
   lblCard4Val.Caption := FormatDateTime('hh:nn:ss', Now);
   AtualizarDashboard;
   if pgcMain.ActivePage = tabMarcacoes then

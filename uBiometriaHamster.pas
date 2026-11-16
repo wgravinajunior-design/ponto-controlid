@@ -259,10 +259,29 @@ begin
       Descricao := AObj.ErrorDescription;
     except
     end;
-    if Descricao <> '' then
-      FUltimoErro := Format('%s: %s (código %d)', [AOperacao, Descricao, Codigo])
+    // Mensagem em linguagem simples para quem está no terminal; o código técnico fica no fim, para o suporte
+    case Codigo of
+      257, 258, 259:
+        FUltimoErro := 'O leitor de digital não foi encontrado.'#13#10 +
+          'Verifique se o cabo USB está bem conectado (tente outra porta USB) e clique em "Recarregar Digitais".';
+      260:
+        FUltimoErro := 'O leitor de digital já está sendo usado por outra tela ou programa.'#13#10 +
+          'Feche as outras janelas do ponto (cadastro de digital, outro terminal) e clique em "Recarregar Digitais".';
+      261:
+        FUltimoErro := 'O leitor de digital não está pronto.'#13#10 +
+          'Clique em "Recarregar Digitais". Se continuar, desconecte e conecte o cabo USB.';
+      513, 514:
+        FUltimoErro := 'Leitura cancelada.';
+      515:
+        FUltimoErro := 'Tempo esgotado: nenhum dedo foi colocado no leitor. Tente novamente.';
     else
-      FUltimoErro := Format('%s: código de erro NBioBSP %d', [AOperacao, Codigo]);
+      FUltimoErro := AOperacao + '.'#13#10 +
+        'Desconecte e conecte o cabo USB do leitor e clique em "Recarregar Digitais".';
+    end;
+    if Descricao <> '' then
+      FUltimoErro := FUltimoErro + Format(#13#10'(detalhe técnico: %s, código %d)', [Descricao, Codigo])
+    else
+      FUltimoErro := FUltimoErro + Format(#13#10'(detalhe técnico: código %d)', [Codigo]);
   end;
 end;
 
