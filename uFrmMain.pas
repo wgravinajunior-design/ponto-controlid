@@ -4017,7 +4017,7 @@ begin
 
     // Dias depois de hoje aparecem na grade, mas sem informações
     if AEspelho.Dias[I].Data > Date then
-      for C := 2 to 14 do
+      for C := 2 to 13 do
         grdEspelho.Cells[C, I + 1] := '';
   end;
 

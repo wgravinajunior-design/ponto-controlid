@@ -728,8 +728,6 @@ begin
   Hoje := Trunc(Date);
   Ini := Trunc(ADataIni);
   Fim := Trunc(ADataFim);
-  if Fim > Hoje then
-    Fim := Hoje;   // dias futuros não são apurados
   if (APessoaId <= 0) or (Ini > Fim) then
     Exit;
 
@@ -1292,6 +1290,17 @@ begin
       It.Extra100 := (It.TipoDia = tdFeriado) or (It.TipoDia = tdDomingoDSR) or
         ((It.TipoDia = tdFolga) and (J.E12x36 or J.ECiclo) and (not It.ForaContrato) and (It.Afastamento = ''));
 
+      // Dia que ainda não chegou: só a carga prevista entra no total (sem batidas, faltas ou saldo)
+      if Dia > Hoje then
+      begin
+        It.AddAlerta('Dia ainda não chegou - não apurado');
+        Inc(R.TotalPrevistoMin, It.CargaPrevistaMin);
+        SetLength(Espelho.FDias, Length(Espelho.FDias) + 1);
+        Espelho.FDias[High(Espelho.FDias)] := It;
+        Dia := Dia + 1;
+        Continue;
+      end;
+
       // Batidas e horas trabalhadas
       if PorDia.TryGetValue(Trunc(Dia), Lst) then
         Bat := Lst.ToArray
@@ -1520,7 +1529,7 @@ begin
     DDescanso := 0;
     for I := 0 to High(Espelho.FDias) do
     begin
-      if Espelho.FDias[I].ForaContrato or (Espelho.FDias[I].Afastamento <> '') then
+      if Espelho.FDias[I].ForaContrato or (Espelho.FDias[I].Afastamento <> '') or (Espelho.FDias[I].Data > Hoje) then
         Continue;
       if (Espelho.FDias[I].TipoDia = tdDomingoDSR) or (Espelho.FDias[I].TipoDia = tdFeriado) then
       begin
