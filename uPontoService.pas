@@ -701,18 +701,33 @@ begin
         begin
           for I := 0 to High(Logs) do
           begin
+            // Só evento 7 (acesso concedido) é batida de ponto. Tentativas
+            // negadas / digital não identificada não podem entrar no espelho.
+            if Logs[I].Event <> 7 then
+            begin
+              if Logs[I].Id > MaxLogId then
+                MaxLogId := Logs[I].Id;
+              Continue;
+            end;
+
             PessoaId := Logs[I].UserId;
             // Se o ID for > 0, tenta validar se existe no banco
             if PessoaId > 0 then
             begin
-              if dmDados.GetPessoaPorId(PessoaId).IsEmpty then
-                PessoaId := 0;
+              var QryP := dmDados.GetPessoaPorId(PessoaId);
+              try
+                if QryP.IsEmpty then
+                  PessoaId := 0;
+              finally
+                QryP.Free;
+              end;
             end;
 
             if dmDados.GravarMarcacao(PessoaId, ARelogioId, Logs[I].Time, Logs[I].Event,
               Logs[I].Id, 'C', Logs[I].Id, '', '', 'Batida Ponto', 'Control iD API') then
             begin
-              Inc(ANovasMarcacoes);
+              if dmDados.UltimaGravacaoNova then
+                Inc(ANovasMarcacoes);
               if Logs[I].Id > MaxLogId then
                 MaxLogId := Logs[I].Id;
             end;
@@ -747,7 +762,8 @@ begin
             if dmDados.GravarMarcacao(PessoaId, ARelogioId, Afds[I].DataHora, 7,
               Afds[I].Nsr, 'C', Afds[I].Nsr, Afds[I].Pis, Afds[I].Cpf, 'Batida Ponto', 'REP AFD') then
             begin
-              Inc(ANovasMarcacoes);
+              if dmDados.UltimaGravacaoNova then
+                Inc(ANovasMarcacoes);
               if Afds[I].Nsr > MaxLogId then
                 MaxLogId := Afds[I].Nsr;
             end;
@@ -770,6 +786,15 @@ begin
       end;
 
       Client.Logout;
+
+      // Classifica Entrada/Saída das batidas recebidas (gravadas como 'Batida Ponto')
+      if ANovasMarcacoes > 0 then
+      try
+        dmDados.NormalizarTiposBatida;
+      except
+        on E: Exception do
+          Log('⚠️ Não foi possível classificar Entrada/Saída das batidas: ' + E.Message, True);
+      end;
     finally
       Client.Free;
     end;

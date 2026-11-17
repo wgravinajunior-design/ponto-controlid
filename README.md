@@ -15,6 +15,25 @@ Sistema completo de integração e gerenciamento de ponto eletrônico para Reló
 - **Sincronização de Colaboradores**: Envio e atualização de colaboradores, matrículas, PIS, CPF e senhas para os equipamentos Control iD.
 - **Auto-Migração de Banco de Dados**: Verificação e criação automática de tabelas, campos, índices e generators no Firebird a cada inicialização.
 - **Auto-Update Integrado**: Verificação em segundo plano de novas versões no GitHub Releases, notificação na interface e download assistido com reinicialização automática.
+- **Leitor Biométrico Nitgen Hamster DX**: Alternativa ao relógio Control iD (Configurações > Relógio de Ponto). Digital cadastrada no colaborador, Terminal de Ponto com identificação 1:N e Entrada/Saída automáticas.
+- **Relatório de Entradas e Saídas**: Cartão de ponto padrão por colaborador (aba Marcações > Relatório E/S), em HTML para imprimir ou salvar em PDF.
+
+## 👆 Leitor Biométrico Hamster DX
+
+Pré-requisitos no computador onde o leitor fica conectado: **driver do Hamster DX** e **SDK Nitgen eNBSP (NBioBSP)**, que registra o `NBioBSPCOM.dll`. Se o arquivo `NBSP2Por.dll` estiver na pasta do executável, o assistente de cadastro abre em português.
+
+1. Em **Configurações > Relógio de Ponto**, escolha *Leitor Biométrico Nitgen Hamster DX* e salve. A aba Relógios e as funções de envio ao Control iD ficam ocultas.
+2. Em **Colaboradores**, selecione o colaborador (já salvo) e clique em **👆 Cadastrar Digital**. Use **🧪 Testar** para conferir.
+3. Clique em **👆 Terminal de Ponto** no topo. Cada leitura reconhecida grava a batida (a 1ª do dia é Entrada, a 2ª é Saída, e assim por diante) com origem `B` (Biometria).
+4. Os relatórios (Marcações, Espelho de Ponto e Relatório E/S) usam as batidas gravadas no banco.
+
+```ini
+[RELOGIO]
+Tipo=HAMSTER_DX              ; CONTROLID ou HAMSTER_DX
+NivelSeguranca=5             ; 1 (tolerante) a 9 (rigoroso)
+IntervaloMinimoBatidaMin=2   ; ignora leituras repetidas do mesmo colaborador
+AbrirTerminalAoIniciar=N
+```
 
 ## 🛠️ Tecnologias
 
