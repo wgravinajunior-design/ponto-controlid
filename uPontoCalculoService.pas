@@ -256,6 +256,7 @@ const
 var
   FalhasJaRegistradas: TStringList;
   GPreApuracao: Boolean;   // True enquanto apura a semana anterior ao período (evita recursão)
+  GApuraHistorico: Boolean; // True enquanto apura os meses anteriores para o saldo acumulado
 
 // Dado auxiliar que não pôde ser lido: segue o cálculo sem ele, mas avisa (uma vez por contexto)
 // em vez de esconder a falha. Tabela inexistente (base antiga) é esperada e fica em silêncio.
@@ -634,6 +635,7 @@ var
   Consecutivos, DUteis, DDescanso: Integer;
   FaltasAnt: TArray<TDateTime>;   // faltas dos dias logo antes do período (para DSR e dias seguidos)
   PreEsp: TEspelhoPonto;
+  HistIni: TDateTime;
   Excluidos: TStringList;   // dia-mês de feriados nacionais desativados pelo usuário
   Afastamentos: TArray<TAfastamento>;
   Feriados: TDictionary<Integer, string>;
@@ -1556,6 +1558,48 @@ begin
     R.SaldoTotalMin := R.BancoCreditoMin - R.BancoDebitoMin
   else
     R.SaldoTotalMin := R.TotalExtrasMin - R.TotalFaltasMin;
+
+  // 9. Sem banco de horas: o saldo dos meses anteriores (extras - faltas desde a primeira batida
+  //    ou da admissão) é acumulado no saldo do período.
+  if (not R.UsaBancoHoras) and (not GPreApuracao) and (not GApuraHistorico) then
+  begin
+    HistIni := 0;
+    try
+      Qry := TFDQuery.Create(nil);
+      try
+        Qry.Connection := dmDados.FDConnection;
+        Qry.SQL.Text := 'SELECT MIN(PMA_DATA_HORA) AS PRIMEIRA FROM TB_PONTO_MARCACAO ' +
+          'WHERE PMA_PESSOA = :P AND PMA_DATA_HORA < :I';
+        Qry.ParamByName('P').AsInteger := APessoaId;
+        Qry.ParamByName('I').AsDateTime := Ini;
+        Qry.Open;
+        if not Qry.FieldByName('PRIMEIRA').IsNull then
+          HistIni := Trunc(Qry.FieldByName('PRIMEIRA').AsDateTime);
+      finally
+        Qry.Free;
+      end;
+    except
+      on E: Exception do
+        RegistrarFalha('a primeira batida do colaborador', 'TB_PONTO_MARCACAO', E);
+    end;
+    if (HistIni > 0) and (Admissao > HistIni) then
+      HistIni := Trunc(Admissao);
+    if (HistIni > 0) and (HistIni < Ini) then
+    begin
+      GApuraHistorico := True;
+      try
+        PreEsp := CalcularEspelho(APessoaId, HistIni, Ini - 1);
+        try
+          Inc(R.SaldoAnteriorMin, PreEsp.Resumo.TotalExtrasMin - PreEsp.Resumo.TotalFaltasMin);
+        finally
+          PreEsp.Free;
+        end;
+      finally
+        GApuraHistorico := False;
+      end;
+    end;
+  end;
+
   Inc(R.SaldoTotalMin, R.SaldoAnteriorMin + R.CreditoHorasMin);
 
   Espelho.FResumo := R;
