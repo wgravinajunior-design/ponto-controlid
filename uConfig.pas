@@ -10,8 +10,8 @@ const
   APP_VERSION = BUILD_VERSION;
   APP_BUILD = BUILD_NUMBER;
   APP_BUILD_DATE = BUILD_DATE;
-  GITHUB_OWNER = 'wgravinajunior-design';
-  GITHUB_REPO = 'ponto-controlid';
+  GITHUB_OWNER = 'AuraSistemas-up';
+  GITHUB_REPO = 'ponto-controlid-releases';
 
 type
   TUpdateInfo = record
