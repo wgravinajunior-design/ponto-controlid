@@ -1194,13 +1194,23 @@ begin
   Qry := TFDQuery.Create(nil);
   try
     Qry.Connection := FDConnection;
+    // Filtros montados conforme os valores informados: comparar ":PARAM <> ''" faz o
+    // Firebird tipar o parâmetro como CHAR(0) e gerar o erro "Data too large for variable".
     Qry.SQL.Text :=
       'SELECT FIRST 1 P.PES_ID FROM TB_PESSOA P ' +
-      'LEFT JOIN TB_COLABORADOR C ON C.COL_PESSOA = P.PES_ID ' +
-      'WHERE (:PIS <> '''' AND (C.COL_PIS = :PIS OR C.COL_PIS CONTAINING :PIS)) ' +
-      '   OR (:CPF <> '''' AND (P.PES_CNPJ_CPF = :CPF OR C.COL_CPF = :CPF OR C.COL_PIS = :CPF))';
-    Qry.ParamByName('PIS').AsString := CleanPis;
-    Qry.ParamByName('CPF').AsString := CleanCpf;
+      'LEFT JOIN TB_COLABORADOR C ON C.COL_PESSOA = P.PES_ID WHERE ';
+    if (CleanPis <> '') and (CleanCpf <> '') then
+      Qry.SQL.Add('(C.COL_PIS = :PIS OR C.COL_PIS CONTAINING :PIS) ' +
+        'OR (P.PES_CNPJ_CPF = :CPF OR C.COL_CPF = :CPF OR C.COL_PIS = :CPF)')
+    else if CleanPis <> '' then
+      Qry.SQL.Add('(C.COL_PIS = :PIS OR C.COL_PIS CONTAINING :PIS)')
+    else
+      Qry.SQL.Add('(P.PES_CNPJ_CPF = :CPF OR C.COL_CPF = :CPF OR C.COL_PIS = :CPF)');
+
+    if CleanPis <> '' then
+      Qry.ParamByName('PIS').AsString := CleanPis;
+    if CleanCpf <> '' then
+      Qry.ParamByName('CPF').AsString := CleanCpf;
     Qry.Open;
 
     if not Qry.IsEmpty then
