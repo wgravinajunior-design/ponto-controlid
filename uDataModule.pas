@@ -99,6 +99,7 @@ type
     function GetColaboradores(const AApenasAtivos: Boolean = True): TFDQuery;
     function GetPessoaPorId(APessoaId: Integer): TFDQuery;
     function BuscarPessoaPorPisOuCpf(const APis, ACpf: string): Integer;
+    function VincularMarcacoesNaoIdentificadas: Integer;
     function SalvarColaborador(var APessoaId: Integer; const ANome, ACpf, APis, AMatricula,
       AFuncao, ACodigoAcesso: string; AAtivo: Boolean; AHorarioId: Integer = 0): Boolean;
     function ExcluirColaborador(APessoaId: Integer; out AErro: string; out AInativado: Boolean): Boolean;
@@ -192,6 +193,13 @@ implementation
 {%CLASSGROUP 'Vcl.Controls.TControl'}
 
 {$R *.dfm}
+
+uses
+  uControlIDClient;
+
+const
+  // Documento (PIS/CPF) só com digitos, nos últimos 11 caracteres, para comparar com valores normalizados
+  SQL_DOC11 = 'RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(%s, ''''), ''.'', ''''), ''-'', ''''), ''/'', ''''), '' '', ''''), 11)';
 
 { TdmDados }
 
@@ -1182,8 +1190,9 @@ var
   CleanPis, CleanCpf: string;
 begin
   Result := 0;
-  CleanPis := Trim(StringReplace(StringReplace(APis, '.', '', [rfReplaceAll]), '-', '', [rfReplaceAll]));
-  CleanCpf := Trim(StringReplace(StringReplace(StringReplace(ACpf, '.', '', [rfReplaceAll]), '-', '', [rfReplaceAll]), '/', '', [rfReplaceAll]));
+  // Normaliza para 11 digitos (o AFD grava o identificador com 12 digitos e zero à esquerda)
+  CleanPis := Documento11(APis);
+  CleanCpf := Documento11(ACpf);
 
   if (CleanPis = '') and (CleanCpf = '') then
     Exit;
@@ -1194,18 +1203,23 @@ begin
   Qry := TFDQuery.Create(nil);
   try
     Qry.Connection := FDConnection;
-    // Filtros montados conforme os valores informados: comparar ":PARAM <> ''" faz o
+    // O identificador do relógio pode ser o PIS ou o CPF (o colaborador é enviado ao relógio
+    // com o CPF quando não tem PIS), por isso cada documento é comparado com PIS e CPF cadastrados.
+    // Filtros montados só para os valores informados: comparar ":PARAM <> ''" faz o
     // Firebird tipar o parâmetro como CHAR(0) e gerar o erro "Data too large for variable".
     Qry.SQL.Text :=
       'SELECT FIRST 1 P.PES_ID FROM TB_PESSOA P ' +
-      'LEFT JOIN TB_COLABORADOR C ON C.COL_PESSOA = P.PES_ID WHERE ';
+      'INNER JOIN TB_COLABORADOR C ON C.COL_PESSOA = P.PES_ID WHERE ';
+    if CleanPis <> '' then
+      Qry.SQL.Add(Format('(%s = :PIS OR %s = :PIS OR %s = :PIS)',
+        [Format(SQL_DOC11, ['C.COL_PIS']), Format(SQL_DOC11, ['C.COL_CPF']), Format(SQL_DOC11, ['P.PES_CNPJ_CPF'])]));
     if (CleanPis <> '') and (CleanCpf <> '') then
-      Qry.SQL.Add('(C.COL_PIS = :PIS OR C.COL_PIS CONTAINING :PIS) ' +
-        'OR (P.PES_CNPJ_CPF = :CPF OR C.COL_CPF = :CPF OR C.COL_PIS = :CPF)')
-    else if CleanPis <> '' then
-      Qry.SQL.Add('(C.COL_PIS = :PIS OR C.COL_PIS CONTAINING :PIS)')
-    else
-      Qry.SQL.Add('(P.PES_CNPJ_CPF = :CPF OR C.COL_CPF = :CPF OR C.COL_PIS = :CPF)');
+      Qry.SQL.Add(' OR ');
+    if CleanCpf <> '' then
+      Qry.SQL.Add(Format('(%s = :CPF OR %s = :CPF OR %s = :CPF)',
+        [Format(SQL_DOC11, ['P.PES_CNPJ_CPF']), Format(SQL_DOC11, ['C.COL_CPF']), Format(SQL_DOC11, ['C.COL_PIS'])]));
+    // Prioriza colaboradores ativos
+    Qry.SQL.Add(' ORDER BY CASE WHEN P.PES_STATUS = ''A'' THEN 0 ELSE 1 END');
 
     if CleanPis <> '' then
       Qry.ParamByName('PIS').AsString := CleanPis;
@@ -1216,6 +1230,72 @@ begin
     if not Qry.IsEmpty then
       Result := Qry.FieldByName('PES_ID').AsInteger;
   finally
+    Qry.Free;
+  end;
+end;
+
+// Revisa as marcações sem colaborador (NÃO IDENTIFICADO): normaliza PIS/CPF gravados
+// (AFD 1510 gravava o PIS com 12 digitos e um "CPF" formado pelos 11 primeiros digitos do PIS)
+// e vincula ao colaborador encontrado. Retorna a quantidade de marcações vinculadas.
+function TdmDados.VincularMarcacoesNaoIdentificadas: Integer;
+var
+  Qry, Upd: TFDQuery;
+  PisRaw, CpfRaw, Pis, Cpf: string;
+  PessoaId: Integer;
+begin
+  Result := 0;
+  if not IsConectado then
+    Conectar;
+
+  Qry := TFDQuery.Create(nil);
+  Upd := TFDQuery.Create(nil);
+  try
+    Qry.Connection := FDConnection;
+    Upd.Connection := FDConnection;
+    Qry.SQL.Text :=
+      'SELECT PMA_ID, PMA_PIS, PMA_CPF FROM TB_PONTO_MARCACAO ' +
+      'WHERE COALESCE(PMA_PESSOA, 0) = 0';
+    Qry.Open;
+
+    Upd.SQL.Text :=
+      'UPDATE TB_PONTO_MARCACAO SET PMA_PESSOA = :PESSOA, PMA_PIS = :PIS, PMA_CPF = :CPF ' +
+      'WHERE PMA_ID = :ID';
+
+    while not Qry.Eof do
+    begin
+      PisRaw := OnlyDigits(Qry.FieldByName('PMA_PIS').AsString);
+      CpfRaw := OnlyDigits(Qry.FieldByName('PMA_CPF').AsString);
+
+      // "CPF" falso extraído do PIS de 12 digitos (parser antigo do AFD 1510)
+      if (Length(PisRaw) = 12) and (CpfRaw = Copy(PisRaw, 1, 11)) then
+        CpfRaw := '';
+
+      Pis := Documento11(PisRaw);
+      Cpf := Documento11(CpfRaw);
+
+      PessoaId := BuscarPessoaPorPisOuCpf(Pis, Cpf);
+      if PessoaId > 0 then
+      begin
+        Upd.ParamByName('PESSOA').AsInteger := PessoaId;
+        Upd.ParamByName('PIS').AsString := Pis;
+        Upd.ParamByName('CPF').AsString := Cpf;
+        Upd.ParamByName('ID').AsInteger := Qry.FieldByName('PMA_ID').AsInteger;
+        Upd.ExecSQL;
+        Inc(Result);
+      end
+      else if (Pis <> Qry.FieldByName('PMA_PIS').AsString) or (Cpf <> Qry.FieldByName('PMA_CPF').AsString) then
+      begin
+        // Mesmo sem colaborador, corrige PIS/CPF exibidos
+        Upd.ParamByName('PESSOA').AsInteger := 0;
+        Upd.ParamByName('PIS').AsString := Pis;
+        Upd.ParamByName('CPF').AsString := Cpf;
+        Upd.ParamByName('ID').AsInteger := Qry.FieldByName('PMA_ID').AsInteger;
+        Upd.ExecSQL;
+      end;
+      Qry.Next;
+    end;
+  finally
+    Upd.Free;
     Qry.Free;
   end;
 end;

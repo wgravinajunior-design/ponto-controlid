@@ -663,6 +663,7 @@ var
   PessoaId: Integer;
   DevTime: TDateTime;
   Is671: Boolean;
+  Vinculadas: Integer;
 begin
   ANovasMarcacoes := 0;
   Result := False;
@@ -795,8 +796,19 @@ begin
 
       Client.Logout;
 
+      // Vincula ao colaborador as batidas gravadas como NÃO IDENTIFICADO
+      Vinculadas := 0;
+      try
+        Vinculadas := dmDados.VincularMarcacoesNaoIdentificadas;
+        if Vinculadas > 0 then
+          Log(Format('🔗 %d batida(s) não identificada(s) vinculada(s) ao colaborador pelo PIS/CPF.', [Vinculadas]));
+      except
+        on E: Exception do
+          Log('⚠️ Não foi possível vincular batidas não identificadas: ' + E.Message, True);
+      end;
+
       // Classifica Entrada/Saída das batidas recebidas (gravadas como 'Batida Ponto')
-      if ANovasMarcacoes > 0 then
+      if (ANovasMarcacoes > 0) or (Vinculadas > 0) then
       try
         dmDados.NormalizarTiposBatida;
       except

@@ -107,8 +107,22 @@ type
 
 function FormatarErroAmigavel(const ARawError: string): string;
 function OnlyDigits(const S: string): string;
+function Documento11(const S: string): string;
 
 implementation
+
+// Normaliza PIS/CPF para 11 digitos: remove pontuação e zeros de preenchimento à esquerda
+// (o AFD grava o identificador com 12 digitos). Retorna '' se não houver documento.
+function Documento11(const S: string): string;
+begin
+  Result := OnlyDigits(S);
+  if Length(Result) > 11 then
+    Result := Copy(Result, Length(Result) - 10, 11)
+  else if Result <> '' then
+    Result := StringOfChar('0', 11 - Length(Result)) + Result;
+  if StrToInt64Def(Result, 0) = 0 then
+    Result := '';
+end;
 
 function FormatarErroAmigavel(const ARawError: string): string;
 var
@@ -1017,23 +1031,34 @@ begin
         Rec.Nsr := StrToInt64Def(Copy(Line, 1, 9), 0);
         Rec.Tipo := 3;
 
-        Dia := StrToIntDef(Copy(Line, 11, 2), 1);
-        Mes := StrToIntDef(Copy(Line, 13, 2), 1);
-        Ano := StrToIntDef(Copy(Line, 15, 4), 2000);
-        Hora := StrToIntDef(Copy(Line, 19, 2), 0);
-        Min := StrToIntDef(Copy(Line, 21, 2), 0);
+        if (Length(Line) >= 46) and (Line[15] = '-') then
+        begin
+          // Portaria 671: data/hora "AAAA-MM-DDThh:mm:00-0300" (11..34) + CPF com 12 digitos (35..46)
+          Ano := StrToIntDef(Copy(Line, 11, 4), 2000);
+          Mes := StrToIntDef(Copy(Line, 16, 2), 1);
+          Dia := StrToIntDef(Copy(Line, 19, 2), 1);
+          Hora := StrToIntDef(Copy(Line, 22, 2), 0);
+          Min := StrToIntDef(Copy(Line, 25, 2), 0);
+          Rec.Cpf := Documento11(Copy(Line, 35, 12));
+        end
+        else
+        begin
+          // Portaria 1510: data "DDMMAAAA" (11..18), hora "hhmm" (19..22) + PIS com 12 digitos (23..34).
+          // O campo de 12 digitos é o identificador do empregado (PIS, ou CPF quando cadastrado sem PIS);
+          // não se extrai CPF dele, pois os 11 primeiros digitos não formam um CPF.
+          Dia := StrToIntDef(Copy(Line, 11, 2), 1);
+          Mes := StrToIntDef(Copy(Line, 13, 2), 1);
+          Ano := StrToIntDef(Copy(Line, 15, 4), 2000);
+          Hora := StrToIntDef(Copy(Line, 19, 2), 0);
+          Min := StrToIntDef(Copy(Line, 21, 2), 0);
+          Rec.Pis := Documento11(Copy(Line, 23, 12));
+        end;
 
         try
           Rec.DataHora := EncodeDateTime(Ano, Mes, Dia, Hora, Min, 0, 0);
         except
           Rec.DataHora := Now;
         end;
-
-        // Portaria 1510 tem PIS com 12 digitos (23..34)
-        // Portaria 671 tem CPF com 11 digitos (23..33)
-        if Length(Line) >= 34 then
-          Rec.Pis := Trim(Copy(Line, 23, 12));
-        Rec.Cpf := Trim(Copy(Line, 23, 11));
 
         Result[Count] := Rec;
         Inc(Count);
