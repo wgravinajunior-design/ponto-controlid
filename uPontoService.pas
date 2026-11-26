@@ -744,12 +744,20 @@ begin
               [NomeRelogio]));
           Result := True;
         end
+        else if Pos('invalid command', LowerCase(Client.LastError)) > 0 then
+        begin
+          // Equipamento REP (iDClass) não possui access_logs: cai para a coleta via AFD
+          Log(Format('ℹ️ O relógio [%s] não suporta coleta via API (access_logs). Alternando automaticamente para coleta via AFD...',
+            [NomeRelogio]));
+          ModoColeta := 'AFD_671';
+        end
         else
           Log(Format('❌ Falha ao obter registros de acesso em [%s]: %s',
             [NomeRelogio, FormatarErroAmigavel(Client.LastError)]), True);
-      end
+      end;
+
       // MODO 2: Coleta via AFD (REP Oficial Portaria 671 / 1510)
-      else
+      if ModoColeta <> 'API' then
       begin
         Is671 := (ModoColeta = 'AFD_671') or (ModoColeta = 'AFD');
         if Client.GetAFD(UltimoLogId + 1, Is671, AfdContent) then

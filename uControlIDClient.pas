@@ -956,14 +956,29 @@ begin
   else
     Extra := '';
 
-  URL := BuildURL('export_afd.fcgi', True, Extra);
-
   if AInitialNSR > 0 then
     Body := Format('{"initial_nsr":%d}', [AInitialNSR])
   else
     Body := '{}';
 
+  // 1. get_afd.fcgi: comando oficial da API REP Control iD (iDClass / iDClass 671)
+  URL := BuildURL('get_afd.fcgi', True, Extra);
   Code := ExecutePost(URL, Body, Resp);
+
+  // Firmwares antigos (Portaria 1510) não aceitam mode=671: tenta sem o parâmetro
+  if (Code <> 200) and APortaria671 then
+  begin
+    URL := BuildURL('get_afd.fcgi', True, '');
+    Code := ExecutePost(URL, Body, Resp);
+  end;
+
+  // 2. Alguns firmwares usam export_afd.fcgi
+  if Code <> 200 then
+  begin
+    URL := BuildURL('export_afd.fcgi', True, Extra);
+    Code := ExecutePost(URL, Body, Resp);
+  end;
+
   if Code = 200 then
   begin
     AAfdContent := Resp;
