@@ -277,13 +277,23 @@ class PontoCalculoService {
     final admissao = asDate(p['COL_DATA_ADMISSAO']), demissao = asDate(p['COL_DATA_DEMISSAO']);
     // Afastamentos (férias, licenças, INSS...) no período
     final afastamentos = await db.getAfastamentos(pessoaId: pessoaId, ini: ini, fim: fim);
+    // Aviso prévio com redução de 2h diárias (CLT art. 488): não é afastamento, o dia é trabalhado
+    bool ehAvisoReducao(String t) {
+      final u = t.toUpperCase();
+      return u.startsWith('AVISO PR') && u.contains('2H');
+    }
+    bool noPeriodo(DbRow a, DateTime dia) {
+      final i = asDate(a['AFA_INICIO']), f = asDate(a['AFA_FIM']);
+      return i != null && f != null && !dia.isBefore(soData(i)) && !dia.isAfter(soData(f));
+    }
     String? afastamentoEm(DateTime dia) {
       for (final a in afastamentos) {
-        final i = asDate(a['AFA_INICIO']), f = asDate(a['AFA_FIM']);
-        if (i != null && f != null && !dia.isBefore(soData(i)) && !dia.isAfter(soData(f))) return asStr(a['AFA_TIPO']);
+        if (noPeriodo(a, dia) && !ehAvisoReducao(asStr(a['AFA_TIPO']))) return asStr(a['AFA_TIPO']);
       }
       return null;
     }
+    bool avisoReducaoEm(DateTime dia) =>
+        afastamentos.any((a) => noPeriodo(a, dia) && ehAvisoReducao(asStr(a['AFA_TIPO'])));
     final faixa1 = AppConfig.instance.folha.extraFaixa1Min;
     final dividirFaixas = AppConfig.instance.folha.pctFaixa1 != AppConfig.instance.folha.pctFaixa2;
     r
@@ -445,6 +455,17 @@ class PontoCalculoService {
         r.totalDiasUteis++;
       }
       programado = programado.where((x) => x.isNotEmpty).toList();
+      // Aviso prévio (art. 488 CLT): jornada 2h menor só nos dias do aviso; a saída programada também antecipa
+      if (!it.foraContrato && it.afastamento.isEmpty && it.cargaPrevistaMin > 0 && avisoReducaoEm(dia)) {
+        it.cargaPrevistaMin = it.cargaPrevistaMin > 120 ? it.cargaPrevistaMin - 120 : 0;
+        if (programado.isNotEmpty) {
+          final m = horaParaMinutos(programado.last) - 120;
+          final mm = m < 0 ? m + 1440 : m;
+          programado[programado.length - 1] =
+              '${(mm ~/ 60).toString().padLeft(2, '0')}:${(mm % 60).toString().padLeft(2, '0')}';
+        }
+        it.alertas.add('Aviso prévio: jornada reduzida em 2h (art. 488 CLT)');
+      }
       // 100%: domingo (DSR), feriado e folga das escalas 12x36 / ciclo; folga semanal comum segue a faixa normal
       it.extra100 = it.tipoDia == TipoDia.feriado ||
           it.tipoDia == TipoDia.domingoDsr ||

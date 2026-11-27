@@ -679,13 +679,32 @@ var
     AddProg(J.S2);
   end;
 
+  // Aviso prévio com redução de 2h diárias (CLT art. 488): não é afastamento, o dia é trabalhado
+  function EhAvisoReducao(const ATipo: string): Boolean;
+  begin
+    Result := Pos('AVISO PR', AnsiUpperCase(ATipo)) = 1;
+    Result := Result and (Pos('2H', AnsiUpperCase(ATipo)) > 0);
+  end;
+
+  function AvisoReducaoEm(ADia: TDateTime): Boolean;
+  var
+    X: Integer;
+  begin
+    Result := False;
+    for X := 0 to High(Afastamentos) do
+      if (ADia >= Afastamentos[X].Ini) and (ADia <= Afastamentos[X].Fim) and
+         EhAvisoReducao(Afastamentos[X].Tipo) then
+        Exit(True);
+  end;
+
   function AfastamentoEm(ADia: TDateTime): string;
   var
     X: Integer;
   begin
     Result := '';
     for X := 0 to High(Afastamentos) do
-      if (ADia >= Afastamentos[X].Ini) and (ADia <= Afastamentos[X].Fim) then
+      if (ADia >= Afastamentos[X].Ini) and (ADia <= Afastamentos[X].Fim) and
+         (not EhAvisoReducao(Afastamentos[X].Tipo)) then
       begin
         Result := Afastamentos[X].Tipo;
         if Result = '' then
@@ -1286,6 +1305,16 @@ begin
         It.Feriado := 'Feriado (marcado manualmente)';
         SetLength(Programado, 0);
         It.AddAlerta('Feriado (marcado manualmente)');
+      end;
+
+      // Aviso prévio (CLT art. 488): jornada reduzida em 2h sem prejuízo do salário, só nos dias do aviso.
+      // A saída programada também é antecipada, para a tolerância por marcação continuar valendo.
+      if (not It.ForaContrato) and (It.Afastamento = '') and (It.CargaPrevistaMin > 0) and AvisoReducaoEm(Dia) then
+      begin
+        It.CargaPrevistaMin := Max(0, It.CargaPrevistaMin - 120);
+        if Length(Programado) > 0 then
+          Programado[High(Programado)] := Programado[High(Programado)] - 120;
+        It.AddAlerta('Aviso prévio: jornada reduzida em 2h (art. 488 CLT)');
       end;
 
       // 100%: domingo (DSR), feriado e folga das escalas 12x36 / ciclo; folga semanal comum segue a faixa normal

@@ -4642,7 +4642,8 @@ begin
           Valores[3] := '';
           if DialogoCampos('Novo afastamento', cmbEspelhoColab.Text,
                ['Tipo|Férias|Licença-maternidade|Licença-paternidade|Auxílio-doença (INSS)|Acidente de trabalho|' +
-                'Licença não remunerada|Suspensão|Serviço militar|Outro afastamento',
+                'Licença não remunerada|Suspensão|Serviço militar|' +
+                'Aviso prévio - saída 2h mais cedo|Aviso prévio - 7 dias corridos de folga|Outro afastamento',
                 'Início (DD/MM/AAAA):', 'Fim (DD/MM/AAAA):', 'Motivo / observação:'], Valores, $0088571B) then
           begin
             if Trim(Valores[0]) = '' then

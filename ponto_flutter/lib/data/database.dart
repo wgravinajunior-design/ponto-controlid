@@ -680,7 +680,8 @@ class Db {
 
   static const tiposAfastamento = [
     'Férias', 'Licença médica (atestado)', 'Afastamento INSS', 'Licença maternidade', 'Licença paternidade',
-    'Licença casamento', 'Licença nojo (falecimento)', 'Folga compensatória', 'Suspensão', 'Outros',
+    'Licença casamento', 'Licença nojo (falecimento)', 'Folga compensatória', 'Suspensão',
+    'Aviso prévio - saída 2h mais cedo', 'Aviso prévio - 7 dias corridos de folga', 'Outros',
   ];
 
   Future<List<DbRow>> getAfastamentos({int pessoaId = 0, DateTime? ini, DateTime? fim}) {
