@@ -173,20 +173,26 @@ if ($ReleaseVersion) {
         Write-Host "  -> Sincronizando com Git..." -ForegroundColor DarkGray
         & $GitCmd add -A
         & $GitCmd commit -m "chore: release $Title" -q
-        & $GitCmd push origin HEAD -q
+        & $GitCmd push origin HEAD:main -q
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  [ERRO] Falha no git push. Release nao publicada." -ForegroundColor Red
             exit 1
         }
+        # Espelho do codigo na organizacao AuraSistemas-up
+        & $GitCmd remote get-url aura *> $null
+        if ($LASTEXITCODE -ne 0) { & $GitCmd remote add aura "https://github.com/AuraSistemas-up/ponto-controlid.git" }
+        & $GitCmd push aura HEAD:main -q
     }
 
-    & $GhCmd release view $Tag *> $null
+    # Binarios publicados no repositorio publico lido pelo auto-update (uConfig: GITHUB_OWNER/GITHUB_REPO)
+    $RelRepo = "AuraSistemas-up/ponto-controlid-releases"
+    & $GhCmd release view $Tag -R $RelRepo *> $null
     if ($LASTEXITCODE -eq 0) {
         Write-Host "  -> Release $Tag ja existe. Atualizando binario e build..." -ForegroundColor Yellow
-        & $GhCmd release upload $Tag $ExePath --clobber
-        & $GhCmd release edit $Tag --title $Title --notes $ReleaseNotes --latest
+        & $GhCmd release upload $Tag $ExePath -R $RelRepo --clobber
+        & $GhCmd release edit $Tag -R $RelRepo --title $Title --notes $ReleaseNotes --latest
     } else {
-        & $GhCmd release create $Tag $ExePath --title $Title --notes $ReleaseNotes --latest
+        & $GhCmd release create $Tag $ExePath -R $RelRepo --title $Title --notes $ReleaseNotes --latest
     }
     $Ok = ($LASTEXITCODE -eq 0)
     $ErrorActionPreference = $PrevEA

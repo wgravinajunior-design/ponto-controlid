@@ -4030,8 +4030,9 @@ begin
     lblCardEsp3Title.Caption := 'Extras 50% / 100%';
     lblCardEsp3Val.Caption := '+' + TPontoCalculoService.MinutosParaHora(TotalExtras50Min + TotalExtrasFaixa2Min) +
       ' / +' + TPontoCalculoService.MinutosParaHora(TotalExtras100Min);
-    lblCardEsp4Title.Caption := 'Atrasos (faltas: ' + TPontoCalculoService.MinutosParaHora(TotalFaltasMin) + ')';
-    lblCardEsp4Val.Caption := '-' + TPontoCalculoService.MinutosParaHora(TotalAtrasosMin);
+    // TotalFaltasMin já soma faltas de dia inteiro + atrasos; TotalAtrasosMin é só a parte dos atrasos
+    lblCardEsp4Title.Caption := 'Faltas e Atrasos (atrasos: ' + TPontoCalculoService.MinutosParaHora(TotalAtrasosMin) + ')';
+    lblCardEsp4Val.Caption := '-' + TPontoCalculoService.MinutosParaHora(TotalFaltasMin);
     if UsaBancoHoras then
       lblCardEsp5Title.Caption := 'Banco de horas'
     else
