@@ -173,15 +173,19 @@ if ($ReleaseVersion) {
         Write-Host "  -> Sincronizando com Git..." -ForegroundColor DarkGray
         & $GitCmd add -A
         & $GitCmd commit -m "chore: release $Title" -q
-        & $GitCmd push origin HEAD:main -q
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "  [ERRO] Falha no git push. Release nao publicada." -ForegroundColor Red
-            exit 1
-        }
-        # Espelho do codigo na organizacao AuraSistemas-up
+        # Repositorio principal do codigo: AuraSistemas-up/ponto-controlid
         & $GitCmd remote get-url aura *> $null
         if ($LASTEXITCODE -ne 0) { & $GitCmd remote add aura "https://github.com/AuraSistemas-up/ponto-controlid.git" }
         & $GitCmd push aura HEAD:main -q
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [ERRO] Falha no git push (aura). Release nao publicada." -ForegroundColor Red
+            exit 1
+        }
+        # Repositorio antigo (wgravinajunior-design): opcional, depende da conta logada ter acesso
+        & $GitCmd push origin HEAD:main -q
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  [AVISO] Push no repositorio antigo (origin) falhou; codigo ficou so no aura." -ForegroundColor Yellow
+        }
     }
 
     # Binarios publicados no repositorio publico lido pelo auto-update (uConfig: GITHUB_OWNER/GITHUB_REPO)
